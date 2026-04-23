@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import ReactMarkdown from 'react-markdown';
-import { collection, addDoc } from 'firebase/firestore';
-import { db } from './firebase';
+import { trackUserActivity } from './utils/tracker'; 
+import { getSystemPrompt } from './utils/aiConfig'; 
+import { getRelevantHistory } from './utils/smartMemory'; // Smart memory import
 import './App.css';
 
 function App() {
@@ -18,15 +19,23 @@ function App() {
   
   const getCurrentTime = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-  const [messages, setMessages] = useState([
-    { 
-      id: Date.now(),
-      role: 'ai', 
-      text: 'Hello! Main **Aivox** hoon. Main aapki kya aasan bhasha mein madad kar sakta hoon? ✨',
-      time: getCurrentTime(),
-      isBookmarked: false
+  // 🔥 LOCAL STORAGE: Check if old chats exist, otherwise load default welcome message
+  const [messages, setMessages] = useState(() => {
+    const savedChats = localStorage.getItem('aivox_chat_history');
+    if (savedChats) {
+      return JSON.parse(savedChats);
     }
-  ]);
+    return [
+      { 
+        id: Date.now(),
+        role: 'ai', 
+        text: 'Hello! Main **Aivox** hoon. Main aapki kya aasan bhasha mein madad kar sakta hoon? ✨',
+        time: getCurrentTime(),
+        isBookmarked: false
+      }
+    ];
+  });
+
   const [loading, setLoading] = useState(false);
   
   const chatEndRef = useRef(null);
@@ -37,6 +46,12 @@ function App() {
   const groqApiKey = import.meta.env.VITE_GROQ_API_KEY;
   const openRouterApiKey = import.meta.env.VITE_OPENROUTER_API_KEY;
 
+  // 🔥 AUTO-SAVE TO LOCAL STORAGE: Whenever 'messages' array changes, save it!
+  useEffect(() => {
+    localStorage.setItem('aivox_chat_history', JSON.stringify(messages));
+  }, [messages]);
+
+  // Auto-scroll to bottom
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
@@ -55,42 +70,6 @@ function App() {
     setTimeout(() => setToastMsg(''), 3000);
   };
 
-  // 🔥 DEEP ACTIVITY TRACKER (EVERY SINGLE DETAIL) 🔥
-  const trackActivity = async (userText, aiResponseText, modelName, timeTakenMs) => {
-    const userTokens = Math.ceil(userText.length / 4);
-    const aiTokens = Math.ceil(aiResponseText.length / 4);
-    const deviceType = window.innerWidth <= 768 ? "Mobile" : "Desktop";
-    const osPlatform = navigator?.userAgentData?.platform || navigator?.platform || "Unknown";
-
-    try {
-      await addDoc(collection(db, "aivox_tracking"), {
-        prompt: userText,
-        response: aiResponseText,
-        model: modelName,
-        userTokens: userTokens,
-        aiTokens: aiTokens,
-        totalTokens: userTokens + aiTokens,
-        roasterMode: isRoasterMode,
-        device: deviceType,
-        os: osPlatform,
-        browser: navigator.userAgent,
-        language: navigator.language,
-        screenResolution: `${window.screen.width}x${window.screen.height}`,
-        responseTimeMs: timeTakenMs,
-        timestamp: new Date().toISOString(),
-      });
-    } catch (e) {
-      console.error("Deep Tracking Error: ", e);
-    }
-  };
-
-  const suggestedPrompts = [
-    "Explain Quantum Computing",
-    "Write a formal email for leave",
-    "Give me a React code snippet",
-    "Tell me a tech joke"
-  ];
-
   const handleGenerate = async (e, customPrompt = null, isRegenerate = false) => {
     if (e) e.preventDefault();
     const textToProcess = customPrompt || prompt.trim();
@@ -104,19 +83,11 @@ function App() {
     }
     setLoading(true);
 
-    let systemPrompt = `Tumhara naam Aivox hai, ek advanced AI assistant. Tumhe 'Nadeem' ne banaya hai.
-    STRICT RULES FOR EXTREME CLARITY:
-    - Humesha ekdum aasan, simple aur clear bhasha (Aasan Hinglish) mein jawab do.
-    - Confusing ya complex bhari technical words ka use mat karo.
-    - Bullet points use karo agar list ho.`;
-
-    if (isRoasterMode) {
-      systemPrompt = `Tum ek SAVAGE, SARCASTIC stand-up comedian AI ho. User ka mazak udao but last mein clear answer do.`;
-    }
+    const systemPrompt = getSystemPrompt(isRoasterMode, "Nadeem");
 
     let finalResponse = "";
     let finalModel = "";
-    const startTime = Date.now(); // ⏱️ Start Timer
+    const startTime = Date.now(); 
 
     try {
       const genAI = new GoogleGenerativeAI(geminiApiKey);
@@ -130,12 +101,19 @@ function App() {
       finalModel = "Gemini";
     } catch (geminiError) {
       try {
+        // SMART MEMORY IMPLEMENTED HERE
+        const smartHistory = getRelevantHistory(textToProcess, messages);
+        const formattedHistory = smartHistory.map(msg => ({
+          role: msg.role === 'ai' ? 'assistant' : 'user',
+          content: msg.text
+        }));
+
         const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
           method: "POST",
           headers: { "Authorization": `Bearer ${groqApiKey}`, "Content-Type": "application/json" },
           body: JSON.stringify({
             model: "llama-3.1-8b-instant", 
-            messages: [{ role: "system", content: systemPrompt }, { role: "user", content: textToProcess }],
+            messages: [{ role: "system", content: systemPrompt }, ...formattedHistory, { role: "user", content: textToProcess }],
             max_tokens: 300, temperature: isRoasterMode ? 0.8 : 0.4
           })
         });
@@ -144,12 +122,18 @@ function App() {
         finalModel = "Llama-3.1 (Groq)";
       } catch (groqError) {
         try {
+            const smartHistory = getRelevantHistory(textToProcess, messages);
+            const formattedHistory = smartHistory.map(msg => ({
+              role: msg.role === 'ai' ? 'assistant' : 'user',
+              content: msg.text
+            }));
+
             const orResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
                 method: "POST",
                 headers: { "Authorization": `Bearer ${openRouterApiKey}`, "Content-Type": "application/json" },
                 body: JSON.stringify({
                   model: "meta-llama/llama-3.1-8b-instruct:free", 
-                  messages: [{ role: "system", content: systemPrompt }, { role: "user", content: textToProcess }],
+                  messages: [{ role: "system", content: systemPrompt }, ...formattedHistory, { role: "user", content: textToProcess }],
                   max_tokens: 300, temperature: isRoasterMode ? 0.8 : 0.4
                 })
             });
@@ -162,16 +146,22 @@ function App() {
         }
       }
     } finally {
-      const endTime = Date.now(); // ⏱️ End Timer
-      const timeTakenMs = endTime - startTime; // Calculate duration
+      const endTime = Date.now();
+      const timeTakenMs = endTime - startTime; 
 
       setMessages(prev => [...prev, { id: Date.now(), role: 'ai', text: finalResponse, time: getCurrentTime(), isBookmarked: false }]);
       setLoading(false);
       setTimeout(() => inputRef.current?.focus(), 100);
       
-      // ✅ YAHAN DATA SAVE HOGA ADMIN KE LIYE
+      // ✅ Yahan se Admin panel (Firebase) ke liye tracking hogi
       if (finalModel !== "Failed" && finalResponse) {
-        trackActivity(textToProcess, finalResponse, finalModel, timeTakenMs);
+        trackUserActivity({
+          prompt: textToProcess,
+          response: finalResponse,
+          model: finalModel,
+          timeTakenMs: timeTakenMs,
+          isRoasterMode: isRoasterMode
+        });
       }
     }
   };
@@ -218,9 +208,12 @@ function App() {
     recognition.start();
   };
 
+  // 🔥 CLEAR CHAT & CLEAR STORAGE
   const handleClearChat = () => {
     if(window.confirm("Sahi mein chat udani hai?")) {
-      setMessages([{ id: Date.now(), role: 'ai', text: 'Chat cleared! ✨', time: getCurrentTime(), isBookmarked: false }]);
+      const resetMsg = [{ id: Date.now(), role: 'ai', text: 'Chat cleared! ✨', time: getCurrentTime(), isBookmarked: false }];
+      setMessages(resetMsg);
+      localStorage.setItem('aivox_chat_history', JSON.stringify(resetMsg)); // Storage bhi saaf
       showToast("Chat Cleared 🗑️");
     }
   };
