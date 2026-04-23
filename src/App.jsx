@@ -94,7 +94,7 @@ function App() {
       const model = genAI.getGenerativeModel({ 
         model: 'gemini-2.5-flash',
         systemInstruction: systemPrompt,
-        generationConfig: { maxOutputTokens: 300, temperature: isRoasterMode ? 0.8 : 0.4 } 
+        generationConfig: { maxOutputTokens: 150, temperature: isRoasterMode ? 0.8 : 0.4 } 
       });
       const result = await model.generateContent(textToProcess);
       finalResponse = result.response.text();
@@ -114,7 +114,7 @@ function App() {
           body: JSON.stringify({
             model: "llama-3.1-8b-instant", 
             messages: [{ role: "system", content: systemPrompt }, ...formattedHistory, { role: "user", content: textToProcess }],
-            max_tokens: 300, temperature: isRoasterMode ? 0.8 : 0.4
+            max_tokens: 150, temperature: isRoasterMode ? 0.8 : 0.4
           })
         });
         const groqData = await groqResponse.json();
@@ -134,7 +134,7 @@ function App() {
                 body: JSON.stringify({
                   model: "meta-llama/llama-3.1-8b-instruct:free", 
                   messages: [{ role: "system", content: systemPrompt }, ...formattedHistory, { role: "user", content: textToProcess }],
-                  max_tokens: 300, temperature: isRoasterMode ? 0.8 : 0.4
+                  max_tokens: 150, temperature: isRoasterMode ? 0.8 : 0.4
                 })
             });
             const orData = await orResponse.json();

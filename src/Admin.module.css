@@ -5,7 +5,7 @@
   background-color: #0b0a14;
   color: #e6e6fa;
   font-family: 'Inter', system-ui, sans-serif;
-  overflow-x: hidden; /* Desktop horizontal scroll fix */
+  overflow-x: hidden; 
 }
 
 /* ─── LOADING STATE ─── */
@@ -51,16 +51,16 @@
   font-weight: 600; box-shadow: inset 3px 0 0 #8c82f2;
 }
 
-/* ─── MAIN CONTENT (BUG FIXED HERE) ─── */
+/* ─── MAIN CONTENT ─── */
 .mainContent {
   flex: 1; 
-  margin-left: 260px; /* Offset for sidebar */
+  margin-left: 260px; 
   padding: 40px; 
-  width: calc(100% - 260px); /* Strictly calculate width to prevent overflow */
+  width: calc(100% - 260px); 
   max-width: 1400px; 
   height: 100vh; 
   overflow-y: auto;
-  box-sizing: border-box; /* Crucial for fixing padding overflow */
+  box-sizing: border-box; 
 }
 
 /* FADE IN ANIMATION */
@@ -130,10 +130,20 @@
   flex: 1; background: #151426; border-radius: 16px; border: 1px solid #1f1e2e;
   display: flex; flex-direction: column; overflow: hidden; position: relative;
 }
-.chatWindowHeader { padding: 20px; background: #121120; border-bottom: 1px solid #1f1e2e; }
+.chatWindowHeader { padding: 20px; background: #121120; border-bottom: 1px solid #1f1e2e; display: flex; align-items: center;}
 .chatWindowHeader h3 { margin: 0; font-size: 16px; color: #fff; }
 
-.chatMessagesArea { flex: 1; padding: 24px; overflow-y: auto; display: flex; flex-direction: column; gap: 24px; }
+.mobileBackBtn { display: none; } /* Hidden by default on Desktop */
+
+.chatMessagesArea { 
+  flex: 1; 
+  padding: 24px; 
+  overflow-y: auto; 
+  display: flex; 
+  flex-direction: column; 
+  gap: 24px; 
+  -webkit-overflow-scrolling: touch; 
+}
 .chatMessagesArea::-webkit-scrollbar { width: 6px; }
 .chatMessagesArea::-webkit-scrollbar-thumb { background: #2a2a40; border-radius: 10px; }
 
@@ -156,69 +166,132 @@
 .bubbleFooter { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px; }
 .bubbleModel { font-size: 10px; font-weight: 700; color: #8c82f2; text-transform: uppercase; }
 
-/* ─── SYSTEM LOGS TABLE (SCROLL FIXES) ─── */
-.tableContainer { 
-  background: #151426; 
-  border-radius: 16px; 
-  border: 1px solid #1f1e2e; 
-  width: 100%;
-}
-
-.tableWrapper { 
-  overflow-x: auto; /* IMPORTANT: Enables horizontal scroll inside table */
-  width: 100%;
-  -webkit-overflow-scrolling: touch;
-}
-
-.adminTable { 
-  width: 100%; 
-  border-collapse: collapse; 
-  text-align: left; 
-  min-width: 800px; /* Forces table scroll if screen is too small */
-}
-
+/* ─── SYSTEM LOGS TABLE ─── */
+.tableContainer { background: #151426; border-radius: 16px; border: 1px solid #1f1e2e; width: 100%; }
+.tableWrapper { overflow-x: auto; width: 100%; -webkit-overflow-scrolling: touch; }
+.adminTable { width: 100%; border-collapse: collapse; text-align: left; min-width: 800px; }
 .adminTable th, .adminTable td { padding: 16px 20px; border-bottom: 1px solid #1f1e2e; vertical-align: top; }
 .adminTable th { background: #121120; color: #888; font-size: 12px; text-transform: uppercase; font-weight: 600; }
 .adminTable tr:hover { background: rgba(255, 255, 255, 0.02); }
-
 .timeCol { color: #fff; font-size: 13px; font-weight: 600; white-space: nowrap; }
 .sysTag { display: inline-block; background: #2a2a40; color: #cdd6f4; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; }
-.subText { font-size: 11px; color: #888; margin-top: 6px; line-height: 1.5; } /* New 10x tracking data styling */
+.subText { font-size: 11px; color: #888; margin-top: 6px; line-height: 1.5; }
 .tokenTotal { font-size: 12px; color: #f5b942; font-weight: 700; margin-top: 4px; }
 
-/* ─── MOBILE RESPONSIVE (BUG FIXED HERE) ─── */
-.menuOverlay {
-  display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.6); z-index: 90; backdrop-filter: blur(3px);
-}
+/* ─── MOBILE RESPONSIVE ─── */
+.menuOverlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 90; backdrop-filter: blur(3px); }
 
 @media (max-width: 1024px) {
   .chatSplitView { flex-direction: column; height: auto; }
-  .userListSidebar { width: 100%; height: 250px; }
-  .chatWindow { height: 600px; }
+  .userListSidebar { width: 100%; height: 200px; } 
+  .chatWindow { height: 500px; display: flex; flex-direction: column; } 
 }
 
 @media (max-width: 900px) {
   .mobileHeader { display: flex; }
-  
-  .mainContent { 
-    margin-left: 0; 
-    width: 100%; /* Strictly 100% on mobile */
-    padding: 90px 15px 30px 15px; 
-    height: 100vh; 
-    overflow: hidden; 
-    overflow-y: auto; 
-  }
-  
+  .mainContent { margin-left: 0; width: 100%; padding: 90px 15px 30px 15px; height: 100vh; overflow-y: auto; }
   .sidebar { transform: translateX(-100%); }
   .sidebarOpen { transform: translateX(0); }
   .closeMenuBtn { display: block; }
   .menuOverlay { display: block; }
-  
   .pageHeader { flex-direction: column; gap: 15px; }
+
+  /* 🔥 WHATSAPP-LIKE UI LOGIC (HIDE/SHOW) 🔥 */
+  .hideOnMobile { display: none !important; }
+  
+  .mobileBackBtn { 
+    display: flex; 
+    align-items: center; 
+    background: transparent; 
+    border: none; 
+    color: #8c82f2; 
+    margin-right: 15px; 
+    padding: 5px;
+    cursor: pointer;
+  }
+
+  .userListSidebar {
+    width: 100%;
+    height: 75vh; /* Full screen list */
+  }
+
+  .chatWindow {
+    width: 100%;
+    height: 75vh; /* Full screen chat */
+  }
+
+  .chatMessagesArea {
+    overflow-y: auto !important; 
+    height: 100%;
+  }
 }
 
 @media (max-width: 600px) {
   .statsGrid { grid-template-columns: 1fr; }
   .chatBubble { max-width: 90%; }
+}
+
+/* =========================================
+   NEW ANALYTICS STYLES (TABS 3 & 4)
+   ========================================= */
+
+.analyticsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 25px;
+}
+
+.analyticsCard {
+  background: #151426;
+  border-radius: 16px;
+  border: 1px solid #1f1e2e;
+  padding: 25px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+}
+
+.analyticsCard h3 {
+  margin: 0 0 20px 0;
+  font-size: 16px;
+  color: #fff;
+  border-bottom: 1px solid #1f1e2e;
+  padding-bottom: 10px;
+}
+
+.progressRow {
+  margin-bottom: 15px;
+}
+
+.progressLabel {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: #cdd6f4;
+  margin-bottom: 5px;
+}
+
+.progressBar {
+  width: 100%;
+  height: 8px;
+  background: #2a2a40;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  border-radius: 10px;
+  transition: width 0.5s ease-in-out;
+}
+
+.perfStat {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px dashed #1f1e2e;
+  font-size: 14px;
+  color: #888;
+}
+
+.perfStat strong {
+  color: #fff;
 }
