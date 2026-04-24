@@ -1,43 +1,35 @@
 import { useState, useRef, useEffect } from 'react';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import ReactMarkdown from 'react-markdown';
-import { trackUserActivity } from './utils/tracker'; 
+import { trackUserActivity, onPromptStart, onPromptKey } from './utils/tracker'; 
 import { getSystemPrompt } from './utils/aiConfig'; 
-import { getRelevantHistory } from './utils/smartMemory'; // Smart memory import
+import { getRelevantHistory } from './utils/smartMemory';
 import './App.css';
 
 function App() {
+  // 🔥 NAME MODAL STATE 🔥
+  const [userName, setUserName] = useState(localStorage.getItem('aivox_username') || '');
+  const [showNameModal, setShowNameModal] = useState(!localStorage.getItem('aivox_username'));
+  const [tempName, setTempName] = useState('');
+
   const [prompt, setPrompt] = useState('');
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showScrollBtn, setShowScrollBtn] = useState(false);
-  
   const [toastMsg, setToastMsg] = useState(''); 
   const [isRoasterMode, setIsRoasterMode] = useState(false); 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false); 
   
   const getCurrentTime = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-  // 🔥 LOCAL STORAGE: Check if old chats exist, otherwise load default welcome message
   const [messages, setMessages] = useState(() => {
     const savedChats = localStorage.getItem('aivox_chat_history');
-    if (savedChats) {
-      return JSON.parse(savedChats);
-    }
-    return [
-      { 
-        id: Date.now(),
-        role: 'ai', 
-        text: 'Hello! Main **Aivox** hoon. Main aapki kya aasan bhasha mein madad kar sakta hoon? ✨',
-        time: getCurrentTime(),
-        isBookmarked: false
-      }
-    ];
+    if (savedChats) return JSON.parse(savedChats);
+    return [{ id: Date.now(), role: 'ai', text: 'Hello! Main **Aivox** hoon. Main aapki kya madad kar sakta hoon? ✨', time: getCurrentTime(), isBookmarked: false }];
   });
 
   const [loading, setLoading] = useState(false);
-  
   const chatEndRef = useRef(null);
   const inputRef = useRef(null);
   const chatContainerRef = useRef(null);
@@ -46,15 +38,8 @@ function App() {
   const groqApiKey = import.meta.env.VITE_GROQ_API_KEY;
   const openRouterApiKey = import.meta.env.VITE_OPENROUTER_API_KEY;
 
-  // 🔥 AUTO-SAVE TO LOCAL STORAGE: Whenever 'messages' array changes, save it!
-  useEffect(() => {
-    localStorage.setItem('aivox_chat_history', JSON.stringify(messages));
-  }, [messages]);
-
-  // Auto-scroll to bottom
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, loading]);
+  useEffect(() => { localStorage.setItem('aivox_chat_history', JSON.stringify(messages)); }, [messages]);
+  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, loading]);
 
   const handleScroll = () => {
     if (chatContainerRef.current) {
@@ -62,12 +47,18 @@ function App() {
       setShowScrollBtn(scrollHeight - scrollTop - clientHeight > 100);
     }
   };
-
   const scrollToBottom = () => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const showToast = (msg) => { setToastMsg(msg); setTimeout(() => setToastMsg(''), 3000); };
 
-  const showToast = (msg) => {
-    setToastMsg(msg);
-    setTimeout(() => setToastMsg(''), 3000);
+  // 🔥 SAVE NAME FUNCTION
+  const handleNameSubmit = (e) => {
+    e.preventDefault();
+    if(tempName.trim().length > 1) {
+      localStorage.setItem('aivox_username', tempName.trim());
+      setUserName(tempName.trim());
+      setShowNameModal(false);
+      showToast(`Welcome, ${tempName.trim()}! 👋`);
+    }
   };
 
   const handleGenerate = async (e, customPrompt = null, isRegenerate = false) => {
@@ -84,38 +75,23 @@ function App() {
     setLoading(true);
 
     const systemPrompt = getSystemPrompt(isRoasterMode, "Nadeem");
-
     let finalResponse = "";
     let finalModel = "";
     const startTime = Date.now(); 
 
     try {
       const genAI = new GoogleGenerativeAI(geminiApiKey);
-      const model = genAI.getGenerativeModel({ 
-        model: 'gemini-2.5-flash',
-        systemInstruction: systemPrompt,
-        generationConfig: { maxOutputTokens: 150, temperature: isRoasterMode ? 0.8 : 0.4 } 
-      });
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash', systemInstruction: systemPrompt, generationConfig: { maxOutputTokens: 150, temperature: isRoasterMode ? 0.8 : 0.4 } });
       const result = await model.generateContent(textToProcess);
       finalResponse = result.response.text();
       finalModel = "Gemini";
     } catch (geminiError) {
       try {
-        // SMART MEMORY IMPLEMENTED HERE
         const smartHistory = getRelevantHistory(textToProcess, messages);
-        const formattedHistory = smartHistory.map(msg => ({
-          role: msg.role === 'ai' ? 'assistant' : 'user',
-          content: msg.text
-        }));
-
+        const formattedHistory = smartHistory.map(msg => ({ role: msg.role === 'ai' ? 'assistant' : 'user', content: msg.text }));
         const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-          method: "POST",
-          headers: { "Authorization": `Bearer ${groqApiKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model: "llama-3.1-8b-instant", 
-            messages: [{ role: "system", content: systemPrompt }, ...formattedHistory, { role: "user", content: textToProcess }],
-            max_tokens: 150, temperature: isRoasterMode ? 0.8 : 0.4
-          })
+          method: "POST", headers: { "Authorization": `Bearer ${groqApiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ model: "llama-3.1-8b-instant", messages: [{ role: "system", content: systemPrompt }, ...formattedHistory, { role: "user", content: textToProcess }], max_tokens: 150, temperature: isRoasterMode ? 0.8 : 0.4 })
         });
         const groqData = await groqResponse.json();
         finalResponse = groqData.choices[0].message.content;
@@ -123,19 +99,10 @@ function App() {
       } catch (groqError) {
         try {
             const smartHistory = getRelevantHistory(textToProcess, messages);
-            const formattedHistory = smartHistory.map(msg => ({
-              role: msg.role === 'ai' ? 'assistant' : 'user',
-              content: msg.text
-            }));
-
+            const formattedHistory = smartHistory.map(msg => ({ role: msg.role === 'ai' ? 'assistant' : 'user', content: msg.text }));
             const orResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-                method: "POST",
-                headers: { "Authorization": `Bearer ${openRouterApiKey}`, "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  model: "meta-llama/llama-3.1-8b-instruct:free", 
-                  messages: [{ role: "system", content: systemPrompt }, ...formattedHistory, { role: "user", content: textToProcess }],
-                  max_tokens: 150, temperature: isRoasterMode ? 0.8 : 0.4
-                })
+                method: "POST", headers: { "Authorization": `Bearer ${openRouterApiKey}`, "Content-Type": "application/json" },
+                body: JSON.stringify({ model: "meta-llama/llama-3.1-8b-instruct:free", messages: [{ role: "system", content: systemPrompt }, ...formattedHistory, { role: "user", content: textToProcess }], max_tokens: 150, temperature: isRoasterMode ? 0.8 : 0.4 })
             });
             const orData = await orResponse.json();
             finalResponse = orData.choices[0].message.content;
@@ -146,21 +113,15 @@ function App() {
         }
       }
     } finally {
-      const endTime = Date.now();
-      const timeTakenMs = endTime - startTime; 
-
+      const timeTakenMs = Date.now() - startTime; 
       setMessages(prev => [...prev, { id: Date.now(), role: 'ai', text: finalResponse, time: getCurrentTime(), isBookmarked: false }]);
       setLoading(false);
       setTimeout(() => inputRef.current?.focus(), 100);
       
-      // ✅ Yahan se Admin panel (Firebase) ke liye tracking hogi
       if (finalModel !== "Failed" && finalResponse) {
         trackUserActivity({
-          prompt: textToProcess,
-          response: finalResponse,
-          model: finalModel,
-          timeTakenMs: timeTakenMs,
-          isRoasterMode: isRoasterMode
+          prompt: textToProcess, response: finalResponse, model: finalModel, timeTakenMs, isRoasterMode,
+          userName: userName // 🔥 Pushing the user name to backend
         });
       }
     }
@@ -175,22 +136,11 @@ function App() {
     }
   };
 
-  const toggleBookmark = (id) => {
-    setMessages(prev => prev.map(msg => msg.id === id ? { ...msg, isBookmarked: !msg.isBookmarked } : msg));
-  };
-
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleGenerate(e); }
-  };
-
-  const handleInputResize = (e) => {
-    e.target.style.height = 'auto';
-    e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
-    setPrompt(e.target.value);
-  };
-
+  const toggleBookmark = (id) => setMessages(prev => prev.map(msg => msg.id === id ? { ...msg, isBookmarked: !msg.isBookmarked } : msg));
+  const handleKeyDown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleGenerate(e); } };
+  const handleInputResize = (e) => { e.target.style.height = 'auto'; e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`; setPrompt(e.target.value); };
   const handleCopy = (text) => { navigator.clipboard.writeText(text); showToast("Copied to clipboard! 📋"); };
-
+  
   const handleSpeak = (text) => {
     if (isSpeaking) { window.speechSynthesis.cancel(); setIsSpeaking(false); return; }
     const utterance = new SpeechSynthesisUtterance(text);
@@ -208,35 +158,43 @@ function App() {
     recognition.start();
   };
 
-  // 🔥 CLEAR CHAT & CLEAR STORAGE
   const handleClearChat = () => {
     if(window.confirm("Sahi mein chat udani hai?")) {
       const resetMsg = [{ id: Date.now(), role: 'ai', text: 'Chat cleared! ✨', time: getCurrentTime(), isBookmarked: false }];
-      setMessages(resetMsg);
-      localStorage.setItem('aivox_chat_history', JSON.stringify(resetMsg)); // Storage bhi saaf
-      showToast("Chat Cleared 🗑️");
+      setMessages(resetMsg); localStorage.setItem('aivox_chat_history', JSON.stringify(resetMsg)); showToast("Chat Cleared 🗑️");
     }
   };
 
   const handleDownloadChat = () => {
-    const chatText = messages.map(m => `[${m.time}] ${m.role === 'ai' ? 'Aivox' : 'Nadeem'}:\n${m.text}\n\n`).join('');
+    const chatText = messages.map(m => `[${m.time}] ${m.role === 'ai' ? 'Aivox' : (userName || 'User')}:\n${m.text}\n\n`).join('');
     const blob = new Blob([chatText], { type: "text/plain" });
-    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "Aivox_Chat.txt"; a.click();
-    showToast("Chat Downloaded 💾");
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "Aivox_Chat.txt"; a.click(); showToast("Chat Downloaded 💾");
   };
 
   const filteredMessages = messages.filter(msg => msg.text.toLowerCase().includes(searchQuery.toLowerCase()));
 
   return (
     <div className={`app-container ${isDarkMode ? 'dark-mode' : 'light-mode'} ${isRoasterMode ? 'roaster-active-theme' : ''}`}>
+      
+      {/* 🔥 NAME ENTRY MODAL 🔥 */}
+      {showNameModal && (
+        <div className="name-modal-overlay">
+          <div className="name-modal-content">
+            <h2>Welcome to Aivox! 🚀</h2>
+            <p>Please enter your name to start chatting with your personalized AI assistant.</p>
+            <form onSubmit={handleNameSubmit}>
+              <input type="text" placeholder="Enter your name..." value={tempName} onChange={(e) => setTempName(e.target.value)} className="name-input" autoFocus required />
+              <button type="submit" disabled={tempName.trim().length < 2} className="name-submit-btn">Start Chatting ✨</button>
+            </form>
+          </div>
+        </div>
+      )}
+
       {toastMsg && <div className="custom-toast">{toastMsg}</div>}
       <div className="chat-wrapper">
         <div className="chat-header">
           <img src="/logo.svg" alt="Aivox Logo" className="header-logo" />
-          <div className="header-info">
-            <h1>Aivox</h1>
-            <p>Created by <strong>Nadeem</strong></p>
-          </div>
+          <div className="header-info"><h1>Aivox</h1><p>Created by <strong>Nadeem</strong></p></div>
           <div className="search-box">
              <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
              <input type="text" placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
@@ -278,15 +236,12 @@ function App() {
                     )}
                   </div>
                 </div>
-                {msg.role === 'user' && <div className="msg-avatar user-avatar">U</div>}
+                {msg.role === 'user' && <div className="msg-avatar user-avatar">{userName ? userName.charAt(0).toUpperCase() : 'U'}</div>}
               </div>
             );
           })}
           {loading && (
-            <div className="message-row ai">
-              <img src="/logo.svg" alt="AI" className="msg-avatar" style={{ background: 'transparent' }} />
-              <div className="message-bubble ai typing-indicator"><span></span><span></span><span></span></div>
-            </div>
+            <div className="message-row ai"><img src="/logo.svg" alt="AI" className="msg-avatar" style={{ background: 'transparent' }} /><div className="message-bubble ai typing-indicator"><span></span><span></span><span></span></div></div>
           )}
           <div ref={chatEndRef} />
         </div>
@@ -297,10 +252,23 @@ function App() {
           <form onSubmit={handleGenerate} className="input-area">
             <button type="button" onClick={handleVoiceInput} className="mic-btn"><svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" strokeWidth="2" fill="none"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></button>
             <div className="textarea-wrapper">
-              <textarea ref={inputRef} value={prompt} onChange={handleInputResize} onKeyDown={handleKeyDown} placeholder="Ask anything..." disabled={loading} rows={1} className="auto-resize-textarea" />
+              <textarea 
+                ref={inputRef} 
+                value={prompt} 
+                onChange={handleInputResize} 
+                onFocus={onPromptStart} 
+                onKeyDown={(e) => {
+                  onPromptKey();
+                  handleKeyDown(e);
+                }} 
+                placeholder="Ask anything..." 
+                disabled={loading || showNameModal} 
+                rows={1} 
+                className="auto-resize-textarea" 
+              />
               <div className="char-counter">{prompt.length} / 500</div>
             </div>
-            <button type="submit" disabled={!prompt.trim() || loading} className="send-btn"><svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
+            <button type="submit" disabled={!prompt.trim() || loading || showNameModal} className="send-btn"><svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
           </form>
         </div>
 

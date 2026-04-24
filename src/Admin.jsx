@@ -1,7 +1,26 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { collection, getDocs, query, orderBy } from 'firebase/firestore';
 import { db } from './firebase';
 import styles from './Admin.module.css';
+
+const makeFingerprint = (log) => {
+  const raw = `${log.os||''}_${log.device||''}_${log.screenResolution||''}_${log.browserVendor||''}`;
+  let hash = 0;
+  for (let i = 0; i < raw.length; i++) { hash = ((hash << 5) - hash) + raw.charCodeAt(i); hash |= 0; }
+  return Math.abs(hash).toString(16).slice(0, 8).toUpperCase();
+};
+
+const getWordFrequency = (logs) => {
+  const stopWords = new Set(['the','a','an','is','in','it','to','of','and','for','i','me','my','you','are','was','what','how','can','do','that','this','with','on','at','be','have','will']);
+  const freq = {};
+  logs.forEach(log => {
+    if (!log.prompt) return;
+    log.prompt.toLowerCase().replace(/[^a-z\s]/g, '').split(/\s+/).forEach(word => {
+      if (word.length > 2 && !stopWords.has(word)) freq[word] = (freq[word] || 0) + 1;
+    });
+  });
+  return Object.entries(freq).sort((a,b) => b[1]-a[1]).slice(0, 40);
+};
 
 function Admin() {
   const [logs, setLogs] = useState([]);
@@ -11,119 +30,219 @@ function Admin() {
   const [selectedUser, setSelectedUser] = useState(null); 
   const [isMobileChatView, setIsMobileChatView] = useState(false);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const q = query(collection(db, "aivox_tracking"), orderBy("timestamp", "desc"));
-        const querySnapshot = await getDocs(q);
-        const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setLogs(data);
-      } catch (error) {
-        console.error("Error fetching data: ", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
+  const [searchQuery, setSearchQuery] = useState('');
+  // 🔥 CHATS TAB WALA NAYA SEARCH STATE 🔥
+  const [chatSearchQuery, setChatSearchQuery] = useState('');
+  
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [countdown, setCountdown] = useState(30);
+  const countdownRef = useRef(null);
+
+  const fetchData = useCallback(async () => {
+    try {
+      const q = query(collection(db, "aivox_tracking"), orderBy("timestamp", "desc"));
+      const snap = await getDocs(q);
+      const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setLogs(data);
+    } catch (error) {
+      console.error("Error fetching data: ", error);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  // 📥 EXPORT TO CSV FUNCTION
-  const downloadCSV = () => {
-    if (logs.length === 0) return alert("No data to download!");
-
-    const headers = ["Time", "Timezone", "Device", "OS", "Browser", "Network", "CPU", "RAM", "Prompt", "Response", "Model", "Speed(s)", "Tokens", "Mode"];
-    
-    const rows = logs.map(log => [
-      new Date(log.timestamp).toLocaleString().replace(/,/g, ''),
-      log.timezone || 'N/A',
-      log.device || 'N/A',
-      log.os || 'N/A',
-      log.browserVendor || 'N/A',
-      log.network || 'N/A',
-      log.cpuCores || 'N/A',
-      log.ramMemory || 'N/A',
-      `"${(log.prompt || '').replace(/"/g, '""')}"`,
-      `"${(log.response || '').replace(/"/g, '""')}"`,
-      log.model || 'N/A',
-      log.responseTimeMs ? (log.responseTimeMs / 1000).toFixed(2) : '0',
-      log.totalTokens || '0',
-      log.isRoasterMode ? 'Roaster' : 'Normal'
-    ]);
-
-    const csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n" + rows.map(e => e.join(",")).join("\n");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Aivox_Analytics_${new Date().toLocaleDateString()}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  // 📊 1. OVERVIEW ANALYTICS
-  const totalRequests = logs.length;
-  const totalTokens = logs.reduce((sum, log) => sum + (log.totalTokens || 0), 0);
-  const avgTimeSec = totalRequests ? (logs.reduce((sum, log) => sum + (log.responseTimeMs || 0), 0) / totalRequests / 1000).toFixed(2) : 0;
-  const roasts = logs.filter(l => l.isRoasterMode).length;
-
-  // 👥 2. GROUP CHATS
-  const chatGroups = logs.reduce((groups, log) => {
-    const userId = `${log.os || 'Unknown'}_${log.device || 'Unknown'}_${log.screenResolution || 'Unknown'}`;
-    if (!groups[userId]) {
-      groups[userId] = { id: userId, device: log.device || "Unknown Device", os: log.os || "Unknown OS", browser: log.browserVendor || "Unknown Browser", network: log.network || "WIFI", messages: [] };
-    }
-    groups[userId].messages.push(log);
-    return groups;
-  }, {});
-  const userList = Object.values(chatGroups).sort((a, b) => new Date(b.messages[0].timestamp) - new Date(a.messages[0].timestamp));
-
-  // 📈 3. DEVICE & BROWSER STATS
-  const osStats = logs.reduce((acc, log) => { acc[log.os] = (acc[log.os] || 0) + 1; return acc; }, {});
-  const browserStats = logs.reduce((acc, log) => { acc[log.browserVendor] = (acc[log.browserVendor] || 0) + 1; return acc; }, {});
-  
-  // ⚡ 4. PERFORMANCE STATS
-  const modelStats = logs.reduce((acc, log) => {
-    const m = log.model || "Unknown";
-    if(!acc[m]) acc[m] = { count: 0, totalTokens: 0, totalTime: 0 };
-    acc[m].count += 1;
-    acc[m].totalTokens += log.totalTokens || 0;
-    acc[m].totalTime += log.responseTimeMs || 0;
-    return acc;
-  }, {});
-
-  // 🌍 6. GEO & LOCAL STATS (NEW)
-  const timezoneStats = logs.reduce((acc, log) => { acc[log.timezone || 'Unknown'] = (acc[log.timezone || 'Unknown'] || 0) + 1; return acc; }, {});
-  const langStats = logs.reduce((acc, log) => { acc[log.language || 'Unknown'] = (acc[log.language || 'Unknown'] || 0) + 1; return acc; }, {});
-
-  // 🔥 7. ROASTER ANALYTICS (NEW)
-  const normalCount = totalRequests - roasts;
-  const roastTokens = logs.filter(l => l.isRoasterMode).reduce((sum, l) => sum + (l.totalTokens || 0), 0);
-  const normalTokens = logs.filter(l => !l.isRoasterMode).reduce((sum, l) => sum + (l.totalTokens || 0), 0);
-
-  // 📡 8. NETWORK & PRIVACY (NEW)
-  const networkStats = logs.reduce((acc, log) => { acc[log.network || 'Unknown'] = (acc[log.network || 'Unknown'] || 0) + 1; return acc; }, {});
-  const displayModeStats = logs.reduce((acc, log) => { acc[log.displayMode || 'Unknown'] = (acc[log.displayMode || 'Unknown'] || 0) + 1; return acc; }, {});
-  const cookieStats = logs.reduce((acc, log) => { acc[log.cookies || 'Unknown'] = (acc[log.cookies || 'Unknown'] || 0) + 1; return acc; }, {});
-
-  // 💰 9. TOKEN ECONOMICS (NEW)
-  const totalInputTokens = logs.reduce((sum, l) => sum + (l.userTokens || 0), 0);
-  const totalOutputTokens = logs.reduce((sum, l) => sum + (l.aiTokens || 0), 0);
-
-  // 🧠 10. PROMPT INTELLIGENCE (NEW)
-  const sortedByLength = [...logs].sort((a, b) => (b.prompt?.length || 0) - (a.prompt?.length || 0));
-  const longestPrompts = sortedByLength.slice(0, 5);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   useEffect(() => {
-    if (userList.length > 0 && !selectedUser && window.innerWidth > 900) setSelectedUser(userList[0]);
-  }, [userList, selectedUser]);
+    if (autoRefresh) {
+      setCountdown(30);
+      countdownRef.current = setInterval(() => {
+        setCountdown(prev => {
+          if (prev <= 1) { fetchData(); return 30; }
+          return prev - 1;
+        });
+      }, 1000);
+    } else {
+      clearInterval(countdownRef.current);
+      setCountdown(30);
+    }
+    return () => clearInterval(countdownRef.current);
+  }, [autoRefresh, fetchData]);
 
-  const handleTabChange = (tab) => { setActiveTab(tab); setIsMobileMenuOpen(false); setIsMobileChatView(false); };
+  const downloadCSV = () => {
+    if (logs.length === 0) return alert("No data!");
+    const headers = ["Time","Timezone","User Name","Device","OS","Browser","Network","CPU","RAM","Prompt","Response","Model","Speed(s)","Tokens","Mode","Fingerprint"];
+    const rows = logs.map(log => [
+      new Date(log.timestamp).toLocaleString().replace(/,/g, ''),
+      log.timezone || 'N/A', 
+      log.userName || 'Anonymous', 
+      log.device || 'N/A', log.os || 'N/A',
+      log.browserVendor || 'N/A', log.network || 'N/A',
+      log.cpuCores || 'N/A', log.ramMemory || 'N/A',
+      `"${(log.prompt||'').replace(/"/g,'""')}"`,
+      `"${(log.response||'').replace(/"/g,'""')}"`,
+      log.model || 'N/A',
+      log.responseTimeMs ? (log.responseTimeMs/1000).toFixed(2) : '0',
+      log.totalTokens || '0',
+      log.isRoasterMode ? 'Roaster' : 'Normal',
+      makeFingerprint(log)
+    ]);
+    const csv = "data:text/csv;charset=utf-8," + headers.join(",") + "\n" + rows.map(r => r.join(",")).join("\n");
+    const a = document.createElement("a");
+    a.href = encodeURI(csv);
+    a.download = `Aivox_Analytics_${new Date().toLocaleDateString()}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  };
 
-  if (loading) return <div className={styles.adminLoading}><div className={styles.spinner}></div><h2>Loading Control Center... ⏳</h2></div>;
+  const totalRequests = logs.length;
+  const totalTokens = logs.reduce((s,l) => s + (l.totalTokens||0), 0);
+  const avgTimeSec = totalRequests ? (logs.reduce((s,l) => s+(l.responseTimeMs||0), 0)/totalRequests/1000).toFixed(2) : 0;
+  const roasts = logs.filter(l => l.isRoasterMode).length;
+  const normalCount = totalRequests - roasts;
+
+  const chatGroups = logs.reduce((groups, log) => {
+    const fp = makeFingerprint(log);
+    const uName = log.userName || "Anonymous";
+    const groupId = `${uName}_${fp}`; 
+    if (!groups[groupId]) groups[groupId] = { id: fp, userName: uName, device: log.device||"Unknown", os: log.os||"Unknown", browser: log.browserVendor||"Unknown", network: log.network||"WIFI", messages: [] };
+    groups[groupId].messages.push(log);
+    return groups;
+  }, {});
+  const userList = Object.values(chatGroups).sort((a,b) => new Date(b.messages[0].timestamp) - new Date(a.messages[0].timestamp));
+
+  // 🔥 FILTER LOGIC FOR CHATS TAB 🔥
+  const filteredChatUsers = userList.filter(user => 
+    user.userName.toLowerCase().includes(chatSearchQuery.toLowerCase()) || 
+    user.device.toLowerCase().includes(chatSearchQuery.toLowerCase())
+  );
+
+  const osStats = logs.reduce((a,l) => { a[l.os]=(a[l.os]||0)+1; return a; }, {});
+  const browserStats = logs.reduce((a,l) => { a[l.browserVendor]=(a[l.browserVendor]||0)+1; return a; }, {});
+
+  const modelStats = logs.reduce((a,l) => {
+    const m = l.model||"Unknown";
+    if(!a[m]) a[m]={count:0,totalTokens:0,totalTime:0,failed:0};
+    a[m].count++; a[m].totalTokens+=(l.totalTokens||0); a[m].totalTime+=(l.responseTimeMs||0);
+    if (m === "Failed") a[m].failed++;
+    return a;
+  }, {});
+
+  const timezoneStats = logs.reduce((a,l) => { const k=l.timezone||'Unknown'; a[k]=(a[k]||0)+1; return a; }, {});
+  const langStats = logs.reduce((a,l) => { const k=l.language||'Unknown'; a[k]=(a[k]||0)+1; return a; }, {});
+  const roastTokens = logs.filter(l=>l.isRoasterMode).reduce((s,l)=>s+(l.totalTokens||0),0);
+  const normalTokens = logs.filter(l=>!l.isRoasterMode).reduce((s,l)=>s+(l.totalTokens||0),0);
+  const networkStats = logs.reduce((a,l) => { const k=l.network||'Unknown'; a[k]=(a[k]||0)+1; return a; }, {});
+  const displayModeStats = logs.reduce((a,l) => { const k=l.displayMode||'Unknown'; a[k]=(a[k]||0)+1; return a; }, {});
+  const cookieStats = logs.reduce((a,l) => { const k=l.cookies||'Unknown'; a[k]=(a[k]||0)+1; return a; }, {});
+  const totalInputTokens = logs.reduce((s,l)=>s+(l.userTokens||0),0);
+  const totalOutputTokens = logs.reduce((s,l)=>s+(l.aiTokens||0),0);
+  const longestPrompts = [...logs].sort((a,b)=>(b.prompt?.length||0)-(a.prompt?.length||0)).slice(0,5);
+
+  const hourlyData = Array(24).fill(0);
+  logs.forEach(l => {
+    const h = new Date(l.timestamp).getHours();
+    if (!isNaN(h)) hourlyData[h]++;
+  });
+  const maxHourly = Math.max(...hourlyData, 1);
+
+  const searchLogs = searchQuery.trim()
+    ? logs.filter(l => {
+        const q = searchQuery.toLowerCase();
+        return (l.prompt||'').toLowerCase().includes(q)
+          || (l.response||'').toLowerCase().includes(q)
+          || (l.device||'').toLowerCase().includes(q)
+          || (l.os||'').toLowerCase().includes(q)
+          || (l.model||'').toLowerCase().includes(q)
+          || (l.userName||'').toLowerCase().includes(q)
+          || (l.timezone||'').toLowerCase().includes(q);
+      })
+    : logs;
+
+  const fingerprintData = Object.values(chatGroups).map(user => {
+    const msgs = user.messages;
+    const avgTokens = msgs.reduce((s,m)=>s+(m.totalTokens||0),0) / msgs.length;
+    const avgSpeed = msgs.reduce((s,m)=>s+(m.responseTimeMs||0),0) / msgs.length / 1000;
+    const roastRatio = msgs.filter(m=>m.isRoasterMode).length / msgs.length;
+    const score = Math.min(100, Math.round((avgTokens / 5) + (msgs.length * 3) + (roastRatio * 20)));
+    return { ...user, avgTokens: Math.round(avgTokens), avgSpeed: avgSpeed.toFixed(1), score, roastRatio: (roastRatio*100).toFixed(0) };
+  }).sort((a,b)=>b.score-a.score);
+
+  const wordFreq = getWordFrequency(logs);
+  const maxWordFreq = wordFreq[0]?.[1] || 1;
+  const wordColors = ['#8c82f2','#00e5ff','#f5b942','#00ff80','#ff6b9d','#ff8c42','#42f5b3','#c542f5'];
+
+  const qualityStats = Object.entries(modelStats).map(([model, d]) => ({
+    model, tokensPerSec: d.totalTime ? ((d.totalTokens / d.totalTime) * 1000).toFixed(1) : 0, avgTokens: d.count ? Math.round(d.totalTokens / d.count) : 0, count: d.count,
+  })).sort((a,b) => b.tokensPerSec - a.tokensPerSec);
+
+  const hwMap = {};
+  logs.forEach(l => {
+    const key = `${l.device||'Unknown'}_${l.os||''}`;
+    if (!hwMap[key]) hwMap[key] = { device: l.device||'Unknown', os: l.os||'Unknown', cpu: l.cpuCores||0, ram: l.ramMemory||0, count: 0 };
+    if (l.cpuCores) hwMap[key].cpu = Math.max(hwMap[key].cpu, Number(l.cpuCores)||0);
+    if (l.ramMemory) hwMap[key].ram = Math.max(hwMap[key].ram, Number(l.ramMemory)||0);
+    hwMap[key].count++;
+  });
+  const hwLeaderboard = Object.values(hwMap)
+    .map(h => ({ ...h, powerScore: (h.cpu * 2) + (h.ram / 2) }))
+    .sort((a,b) => b.powerScore - a.powerScore).slice(0, 10);
+
+  const failedLogs = logs.filter(l => (l.model||'') === 'Failed' || !l.response);
+  const failRate = totalRequests ? ((failedLogs.length / totalRequests) * 100).toFixed(1) : 0;
+  const slowLogs = logs.filter(l => (l.responseTimeMs||0) > 5000);
+  const slowRate = totalRequests ? ((slowLogs.length / totalRequests) * 100).toFixed(1) : 0;
+
+  const depthBuckets = { '1':0,'2-3':0,'4-5':0,'6-10':0,'10+':0 };
+  Object.values(chatGroups).forEach(u => {
+    const n = u.messages.length;
+    if (n === 1) depthBuckets['1']++;
+    else if (n <= 3) depthBuckets['2-3']++;
+    else if (n <= 5) depthBuckets['4-5']++;
+    else if (n <= 10) depthBuckets['6-10']++;
+    else depthBuckets['10+']++;
+  });
+  const maxDepth = Math.max(...Object.values(depthBuckets), 1);
+  const depthColors = ['#8c82f2','#00e5ff','#f5b942','#00ff80','#ff6b9d'];
+
+  const topOS = Object.entries(osStats).sort((a,b)=>b[1]-a[1])[0];
+  const topBrowser = Object.entries(browserStats).sort((a,b)=>b[1]-a[1])[0];
+  const topTimezone = Object.entries(timezoneStats).sort((a,b)=>b[1]-a[1])[0];
+  const topModel = Object.entries(modelStats).sort((a,b)=>b[1].count-a[1].count)[0];
+  const peakHour = hourlyData.indexOf(Math.max(...hourlyData));
+  const uniqueUsers = Object.keys(chatGroups).length;
+
+  useEffect(() => {
+    if (filteredChatUsers.length > 0 && !selectedUser && window.innerWidth > 900) setSelectedUser(filteredChatUsers[0]);
+  }, [filteredChatUsers, selectedUser]);
+
+  const handleTabChange = (tab) => { setActiveTab(tab); setIsMobileMenuOpen(false); setIsMobileChatView(false); setSearchQuery(''); setChatSearchQuery(''); };
+
+  if (loading) return (
+    <div className={styles.adminLoading}>
+      <div className={styles.spinner}></div>
+      <h2>Loading Control Center... ⏳</h2>
+    </div>
+  );
+
+  const NavSection = ({ label, children }) => (
+    <div>
+      <div className={styles.navSection}>
+        <span className={styles.navSectionLabel}>{label}</span>
+      </div>
+      <nav className={styles.navMenu}>{children}</nav>
+    </div>
+  );
+
+  const NavBtn = ({ tab, children }) => (
+    <button
+      className={`${styles.navItem} ${activeTab === tab ? styles.activeNav : ''}`}
+      onClick={() => handleTabChange(tab)}
+    >{children}</button>
+  );
 
   return (
     <div className={styles.adminLayout}>
-      
+
       {/* 📱 MOBILE HEADER */}
       <div className={styles.mobileHeader}>
         <h2>🚀 Aivox Admin</h2>
@@ -132,220 +251,776 @@ function Admin() {
         </button>
       </div>
 
-      {/* 🖥️ SIDEBAR NAVIGATION (NOW WITH 10 TABS) */}
+      {/* 🖥️ SIDEBAR */}
       <aside className={`${styles.sidebar} ${isMobileMenuOpen ? styles.sidebarOpen : ''}`}>
         <div className={styles.sidebarHeader}>
           <h2>🚀 Aivox Pro</h2>
           <button className={styles.closeMenuBtn} onClick={() => setIsMobileMenuOpen(false)}>✕</button>
         </div>
-        
-        <nav className={styles.navMenu}>
-          <button className={`${styles.navItem} ${activeTab === 'overview' ? styles.activeNav : ''}`} onClick={() => handleTabChange('overview')}>📊 Overview</button>
-          <button className={`${styles.navItem} ${activeTab === 'chats' ? styles.activeNav : ''}`} onClick={() => handleTabChange('chats')}>💬 User Chats</button>
-          <button className={`${styles.navItem} ${activeTab === 'devices' ? styles.activeNav : ''}`} onClick={() => handleTabChange('devices')}>📱 Devices Info</button>
-          <button className={`${styles.navItem} ${activeTab === 'performance' ? styles.activeNav : ''}`} onClick={() => handleTabChange('performance')}>⚡ AI Performance</button>
-          <button className={`${styles.navItem} ${activeTab === 'geography' ? styles.activeNav : ''}`} onClick={() => handleTabChange('geography')}>🌍 Geo & Local</button>
-          <button className={`${styles.navItem} ${activeTab === 'roaster' ? styles.activeNav : ''}`} onClick={() => handleTabChange('roaster')}>🔥 Roaster Analytics</button>
-          <button className={`${styles.navItem} ${activeTab === 'network' ? styles.activeNav : ''}`} onClick={() => handleTabChange('network')}>📡 Network Data</button>
-          <button className={`${styles.navItem} ${activeTab === 'economics' ? styles.activeNav : ''}`} onClick={() => handleTabChange('economics')}>💰 Token Economics</button>
-          <button className={`${styles.navItem} ${activeTab === 'prompts' ? styles.activeNav : ''}`} onClick={() => handleTabChange('prompts')}>🧠 Prompt Intel</button>
-          <button className={`${styles.navItem} ${activeTab === 'system' ? styles.activeNav : ''}`} onClick={() => handleTabChange('system')}>⚙️ System Logs</button>
-        </nav>
+
+        <div className={styles.autoRefreshBadge}>
+          <span>🔄 Auto Refresh {autoRefresh ? `(${countdown}s)` : 'OFF'}</span>
+          <label className={styles.autoRefreshToggle}>
+            <input type="checkbox" checked={autoRefresh} onChange={e => setAutoRefresh(e.target.checked)} />
+            <span className={styles.toggleSlider}></span>
+          </label>
+        </div>
+
+        <NavSection label="Main">
+          <NavBtn tab="overview">📊 Overview</NavBtn>
+          <NavBtn tab="chats">💬 User Chats</NavBtn>
+          <NavBtn tab="search">🔍 Live Search</NavBtn>
+        </NavSection>
+
+        <NavSection label="Users">
+          <NavBtn tab="fingerprint">🔏 Fingerprints</NavBtn>
+          <NavBtn tab="depth">💬 Conv. Depth</NavBtn>
+          <NavBtn tab="heatmap">🌡️ Hour Heatmap</NavBtn>
+        </NavSection>
+
+        <NavSection label="AI & Quality">
+          <NavBtn tab="performance">⚡ AI Performance</NavBtn>
+          <NavBtn tab="quality">📈 Quality Meter</NavBtn>
+          <NavBtn tab="errors">⚠️ Error Monitor</NavBtn>
+          <NavBtn tab="prompts">🧠 Prompt Intel</NavBtn>
+          <NavBtn tab="wordcloud">☁️ Word Cloud</NavBtn>
+        </NavSection>
+
+        <NavSection label="Device & Geo">
+          <NavBtn tab="devices">📱 Devices</NavBtn>
+          <NavBtn tab="hardware">🖥️ HW Leaderboard</NavBtn>
+          <NavBtn tab="geography">🌍 Geo & Local</NavBtn>
+          <NavBtn tab="network">📡 Network</NavBtn>
+        </NavSection>
+
+        <NavSection label="Finance & Report">
+          <NavBtn tab="roaster">🔥 Roaster</NavBtn>
+          <NavBtn tab="economics">💰 Token Economics</NavBtn>
+          <NavBtn tab="report">📋 Analytics Report</NavBtn>
+          <NavBtn tab="system">⚙️ System Logs</NavBtn>
+        </NavSection>
       </aside>
 
       {/* ⬛ MAIN CONTENT */}
       <main className={styles.mainContent}>
-        
-        {/* SECTION 1: OVERVIEW */}
+
+        {/* ══ OVERVIEW ══ */}
         {activeTab === 'overview' && (
           <div className={styles.sectionFadeIn}>
-            <header className={styles.pageHeader}><div><h1>📊 Dashboard Overview</h1><p>High-level metrics and API usage.</p></div><div className={styles.liveBadge}><span className={styles.pulse}></span> LIVE</div></header>
+            <header className={styles.pageHeader}>
+              <div><h1>📊 Dashboard Overview</h1><p>High-level metrics and API usage.</p></div>
+              <div className={styles.pageHeaderRight}>
+                <span className={styles.refreshCountdown}>
+                  {autoRefresh ? `🔄 ${countdown}s` : '⏸ Manual'}
+                </span>
+                <div className={styles.liveBadge}><span className={styles.pulse}></span> LIVE</div>
+              </div>
+            </header>
             <div className={styles.statsGrid}>
-              <div className={styles.statCard}><h3>Total API Calls</h3><p className={styles.statValue}>{totalRequests}</p></div>
-              <div className={styles.statCard}><h3>Tokens Consumed</h3><p className={`${styles.statValue} ${styles.tokenColor}`}>{totalTokens.toLocaleString()}</p></div>
-              <div className={styles.statCard}><h3>Avg. Speed</h3><p className={`${styles.statValue} ${styles.speedColor}`}>{avgTimeSec}s</p></div>
-              <div className={styles.statCard}><h3>Roasts vs Normal</h3><p className={styles.statValue}><span className={styles.roastColor}>{roasts}</span> <span style={{fontSize:'20px', color:'#555', margin:'0 10px'}}>/</span> <span className={styles.normalColor}>{normalCount}</span></p></div>
+              <div className={styles.statCard} style={{'--stat-color':'#8c82f2'}}>
+                <h3>Total API Calls</h3>
+                <p className={styles.statValue}>{totalRequests}</p>
+                <p className={styles.statTrend}>Unique users: <span className={styles.statTrendUp}>{uniqueUsers}</span></p>
+              </div>
+              <div className={styles.statCard} style={{'--stat-color':'#f5b942'}}>
+                <h3>Tokens Consumed</h3>
+                <p className={`${styles.statValue} ${styles.tokenColor}`}>{totalTokens.toLocaleString()}</p>
+                <p className={styles.statTrend}>Avg/request: {totalRequests ? Math.round(totalTokens/totalRequests) : 0}</p>
+              </div>
+              <div className={styles.statCard} style={{'--stat-color':'#00e5ff'}}>
+                <h3>Avg. Speed</h3>
+                <p className={`${styles.statValue} ${styles.speedColor}`}>{avgTimeSec}s</p>
+                <p className={styles.statTrend}>Peak hour: <span className={styles.statTrendUp}>{peakHour}:00</span></p>
+              </div>
+              <div className={styles.statCard} style={{'--stat-color':'#ff4d4f'}}>
+                <h3>Roasts / Normal</h3>
+                <p className={styles.statValue}>
+                  <span className={styles.roastColor}>{roasts}</span>
+                  <span style={{fontSize:'18px',color:'#333',margin:'0 8px'}}>/</span>
+                  <span className={styles.normalColor}>{normalCount}</span>
+                </p>
+                <p className={styles.statTrend}>Fail rate: <span className={failRate>5?styles.statTrendDown:styles.statTrendUp}>{failRate}%</span></p>
+              </div>
+              <div className={styles.statCard} style={{'--stat-color':'#00ff80'}}>
+                <h3>Unique Devices</h3>
+                <p className={`${styles.statValue} ${styles.statTrendUp}`}>{uniqueUsers}</p>
+                <p className={styles.statTrend}>Top OS: {topOS?.[0] || 'N/A'}</p>
+              </div>
+              <div className={styles.statCard} style={{'--stat-color':'#ff6b9d'}}>
+                <h3>Slow Responses</h3>
+                <p className={styles.statValue} style={{color:'#ff6b9d'}}>{slowLogs.length}</p>
+                <p className={styles.statTrend}>Slow rate: <span className={slowRate>10?styles.statTrendDown:styles.statTrendUp}>{slowRate}%</span></p>
+              </div>
+            </div>
+
+            <div className={styles.analyticsCard} style={{marginBottom: '24px'}}>
+              <h3>🌡️ Today's Hourly Traffic (Quick View)</h3>
+              <div className={styles.heatmapGrid}>
+                {hourlyData.map((count, h) => {
+                  const intensity = count / maxHourly;
+                  const bg = intensity === 0 ? '#1f1e2e' : `rgba(140,130,242,${Math.max(0.08, intensity)})`;
+                  return (
+                    <div key={h} className={styles.heatmapCell} style={{background: bg}}>
+                      {count > 0 && <span className={styles.heatmapLabel}>{count}</span>}
+                      <span className={styles.heatmapTooltip}>{h}:00 — {count} req</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className={styles.heatmapXAxis}>
+                {hourlyData.map((_,h) => <div key={h} className={styles.heatmapXLabel}>{h}</div>)}
+              </div>
             </div>
           </div>
         )}
 
-        {/* SECTION 2: LIVE CHATS */}
+        {/* ══ CHATS (🔥 NOW WITH SEARCH BOX IN SIDEBAR) ══ */}
         {activeTab === 'chats' && (
           <div className={styles.sectionFadeIn}>
-            <header className={`${styles.pageHeader} ${isMobileChatView ? styles.hideOnMobile : ''}`}><div><h1>💬 Live User Chats</h1><p>View exact Mobile/Laptop models and their conversations.</p></div></header>
+            <header className={`${styles.pageHeader} ${isMobileChatView ? styles.hideOnMobile : ''}`}>
+              <div><h1>💬 Live User Chats</h1><p>Search by User Name to view their messages.</p></div>
+            </header>
             <div className={styles.chatSplitView}>
               <div className={`${styles.userListSidebar} ${isMobileChatView ? styles.hideOnMobile : ''}`}>
-                <h3 className={styles.paneTitle}>Active Devices ({userList.length})</h3>
+                <h3 className={styles.paneTitle}>Active Users ({filteredChatUsers.length})</h3>
+                
+                {/* 🔥 NEW INLINE SEARCH BOX FOR CHATS TAB 🔥 */}
+                <div style={{ padding: '10px 15px', borderBottom: '1px solid #1f1e2e', background: '#121120' }}>
+                  <input
+                    type="text"
+                    placeholder="Search by name..."
+                    value={chatSearchQuery}
+                    onChange={(e) => setChatSearchQuery(e.target.value)}
+                    style={{
+                      width: '100%', padding: '8px 12px', borderRadius: '8px',
+                      border: '1px solid #3a3a5e', background: '#0b0a14',
+                      color: '#fff', fontSize: '13px', outline: 'none', boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+
                 <div className={styles.userListScroll}>
-                  {userList.map(user => (
-                    <div key={user.id} onClick={() => { setSelectedUser(user); setIsMobileChatView(true); }} className={`${styles.userListItem} ${selectedUser?.id === user.id ? styles.activeUserItem : ''}`}>
-                      <div className={styles.userAvatar}>{user.os.includes('Mac') || user.os.includes('iOS') ? '🍎' : user.os.includes('Android') ? '🤖' : '💻'}</div>
+                  {filteredChatUsers.map(user => (
+                    <div key={user.id} onClick={() => { setSelectedUser(user); setIsMobileChatView(true); }}
+                      className={`${styles.userListItem} ${selectedUser?.id === user.id ? styles.activeUserItem : ''}`}>
+                      <div className={styles.userAvatar}>{user.os?.includes('Mac')||user.os?.includes('iOS')?'🍎':user.os?.includes('Android')?'🤖':'💻'}</div>
                       <div className={styles.userInfo}>
-                        <h4 style={{color: '#00e5ff'}}>{user.device}</h4>
-                        <p>{user.os} • {user.browser}</p>
-                        <span style={{fontSize: '10px', color: '#555'}}>{user.messages.length} Msgs | {user.network}</span>
+                        <h4 style={{color:'#fff', fontSize: '15px'}}>{user.userName}</h4>
+                        <p style={{color:'#00e5ff', fontSize: '12px', marginTop: '2px'}}>{user.device} • {user.os}</p>
+                        <span style={{fontSize:'10px',color:'#555'}}>{user.messages.length} msgs | {user.network} | ID: {user.id}</span>
                       </div>
                     </div>
                   ))}
+                  {filteredChatUsers.length === 0 && (
+                    <div style={{padding: '20px', textAlign: 'center', color: '#888', fontSize: '13px'}}>No user found 🤷‍♂️</div>
+                  )}
                 </div>
               </div>
-
+              
               <div className={`${styles.chatWindow} ${!isMobileChatView ? styles.hideOnMobile : ''}`}>
                 {selectedUser ? (
                   <>
                     <div className={styles.chatWindowHeader}>
-                      <button className={styles.mobileBackBtn} onClick={() => setIsMobileChatView(false)}>⬅️ Back</button>
-                      <div><h3 style={{margin: 0}}>{selectedUser.device}</h3><p style={{margin: 0, fontSize: '11px', color: '#888'}}>OS: {selectedUser.os} | Res: {selectedUser.messages[0]?.screenResolution}</p></div>
+                      <button className={styles.mobileBackBtn} onClick={() => setIsMobileChatView(false)}>⬅️</button>
+                      <div>
+                        <h3 style={{margin:0}}>{selectedUser.userName}</h3>
+                        <p style={{margin:0,fontSize:'11px',color:'#888'}}>{selectedUser.device} | FP: {selectedUser.id}</p>
+                      </div>
                     </div>
                     <div className={styles.chatMessagesArea}>
                       {selectedUser.messages.slice().reverse().map(log => (
                         <div key={log.id} className={styles.chatPair}>
-                          <div className={`${styles.bubbleRow} ${styles.rowUser}`}><div className={`${styles.chatBubble} ${styles.bubbleUser}`}>{log.prompt}<span className={styles.bubbleTime}>{new Date(log.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span></div></div>
-                          <div className={`${styles.bubbleRow} ${styles.rowAi}`}><div className={styles.chatAvatarWrapper}><img src="/logo.svg" alt="AI" className={styles.aiSmallAvatar} /></div><div className={`${styles.chatBubble} ${styles.bubbleAi} ${log.roasterMode ? styles.bubbleRoast : ''}`}>{log.response}<div className={styles.bubbleFooter}><span className={styles.bubbleModel}>{log.model}</span><span className={styles.bubbleTime}>{(log.responseTimeMs / 1000).toFixed(1)}s</span></div></div></div>
+                          <div className={`${styles.bubbleRow} ${styles.rowUser}`}>
+                            <div className={`${styles.chatBubble} ${styles.bubbleUser}`}>
+                              {log.prompt}
+                              <span className={styles.bubbleTime}>{new Date(log.timestamp).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span>
+                            </div>
+                          </div>
+                          <div className={`${styles.bubbleRow} ${styles.rowAi}`}>
+                            <div className={styles.chatAvatarWrapper}><img src="/logo.svg" alt="AI" className={styles.aiSmallAvatar}/></div>
+                            <div className={`${styles.chatBubble} ${styles.bubbleAi} ${log.isRoasterMode?styles.bubbleRoast:''}`}>
+                              {log.response}
+                              <div className={styles.bubbleFooter}>
+                                <span className={styles.bubbleModel}>{log.model}</span>
+                                <span className={styles.bubbleTime}>{((log.responseTimeMs||0)/1000).toFixed(1)}s • {log.totalTokens||0} tok</span>
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       ))}
                     </div>
                   </>
-                ) : (<div className={styles.noUserSelected}><h2>👈 Select a user device to view chat</h2></div>)}
+                ) : <div className={styles.noUserSelected}><h2>👈 Select a user</h2></div>}
               </div>
             </div>
           </div>
         )}
 
-        {/* SECTION 3: DEVICES */}
-        {activeTab === 'devices' && (
+        {/* ══ LIVE SEARCH (Global) ══ */}
+        {activeTab === 'search' && (
           <div className={styles.sectionFadeIn}>
-            <header className={styles.pageHeader}><div><h1>📱 Device & Browser Demographics</h1><p>See where your users are coming from.</p></div></header>
-            <div className={styles.analyticsGrid}>
-              <div className={styles.analyticsCard}>
-                <h3>Operating Systems</h3>
-                {Object.entries(osStats).sort((a,b)=>b[1]-a[1]).map(([os, count]) => (
-                  <div key={os} className={styles.progressRow}><div className={styles.progressLabel}><span>{os}</span><span>{count}</span></div><div className={styles.progressBar}><div className={styles.progressFill} style={{width: `${(count/totalRequests)*100}%`, background: '#8c82f2'}}></div></div></div>
-                ))}
-              </div>
-              <div className={styles.analyticsCard}>
-                <h3>Browsers Used</h3>
-                {Object.entries(browserStats).sort((a,b)=>b[1]-a[1]).map(([browser, count]) => (
-                  <div key={browser} className={styles.progressRow}><div className={styles.progressLabel}><span>{browser}</span><span>{count}</span></div><div className={styles.progressBar}><div className={styles.progressFill} style={{width: `${(count/totalRequests)*100}%`, background: '#00e5ff'}}></div></div></div>
-                ))}
+            <header className={styles.pageHeader}>
+              <div><h1>🔍 Live Search</h1><p>Prompts, responses, devices, names, models — sab kuch ek jagah dhundo.</p></div>
+            </header>
+            <div className={styles.searchBar}>
+              <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input
+                type="text"
+                placeholder="Kuch bhi search karo — naam, prompt, device, model..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                autoFocus
+              />
+              {searchQuery && (
+                <button className={styles.searchClear} onClick={() => setSearchQuery('')}>×</button>
+              )}
+              <span className={styles.searchResults}>{searchLogs.length} results</span>
+            </div>
+            <div className={styles.tableContainer}>
+              <div className={styles.tableWrapper}>
+                <table className={styles.adminTable}>
+                  <thead>
+                    <tr><th>Time</th><th>User / Device</th><th>Prompt</th><th>Response Preview</th><th>Model</th><th>Tokens</th></tr>
+                  </thead>
+                  <tbody>
+                    {searchLogs.slice(0,100).map(log => (
+                      <tr key={log.id}>
+                        <td className={styles.timeCol} style={{fontSize:'11px'}}>{new Date(log.timestamp).toLocaleString()}</td>
+                        <td>
+                          <div className={styles.sysTag} style={{background:'#8c82f2', color:'#fff'}}>{log.userName || '?'}</div>
+                          <div className={styles.subText}>{log.device||'?'} • {log.os}</div>
+                        </td>
+                        <td style={{maxWidth:'280px',fontSize:'13px',color:'#cdd6f4',fontStyle:'italic'}}>"{log.prompt?.slice(0,120)}{(log.prompt?.length||0)>120?'…':''}"</td>
+                        <td style={{maxWidth:'200px',fontSize:'12px',color:'#888'}}>{log.response?.slice(0,80)}{(log.response?.length||0)>80?'…':''}</td>
+                        <td><span style={{color:'#8c82f2',fontSize:'11px',fontWeight:'700'}}>{log.model}</span></td>
+                        <td><span className={styles.tokenTotal}>{log.totalTokens||0}</span></td>
+                      </tr>
+                    ))}
+                    {searchLogs.length === 0 && (
+                      <tr><td colSpan={6} style={{textAlign:'center',color:'#555',padding:'40px'}}>Kuch nahi mila "{searchQuery}" ke liye 🤔</td></tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
         )}
 
-        {/* SECTION 4: AI PERFORMANCE */}
-        {activeTab === 'performance' && (
+        {/* ══ HOUR HEATMAP ══ */}
+        {activeTab === 'heatmap' && (
           <div className={styles.sectionFadeIn}>
-            <header className={styles.pageHeader}><div><h1>⚡ AI Model Performance</h1><p>Speed, Token usage, and Fallback analysis.</p></div></header>
+            <header className={styles.pageHeader}>
+              <div><h1>🌡️ Hourly Traffic Heatmap</h1><p>Konse ghante mein sabse zyada traffic aata hai — 0 se 23 tak.</p></div>
+            </header>
+            <div className={styles.analyticsCard} style={{marginBottom:'24px'}}>
+              <h3>Requests Per Hour</h3>
+              <div className={styles.heatmapGrid}>
+                {hourlyData.map((count, h) => {
+                  const intensity = count / maxHourly;
+                  const r = Math.round(140 * intensity + 83 * (1-intensity));
+                  const g = Math.round(130 * intensity + 130 * (1-intensity));
+                  const b = Math.round(242 * (1-intensity*0.5) + 30 * intensity);
+                  const bg = count === 0 ? '#1a1929' : `rgb(${r},${g},${b})`;
+                  return (
+                    <div key={h} className={styles.heatmapCell} style={{background: bg, opacity: count===0?0.3:1}}>
+                      {count > 0 && <span className={styles.heatmapLabel}>{count}</span>}
+                      <span className={styles.heatmapTooltip}>{h}:00 — {count} req</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className={styles.heatmapXAxis}>
+                {hourlyData.map((_,h) => (
+                  <div key={h} className={styles.heatmapXLabel} style={{fontWeight: h===peakHour?'700':'400', color: h===peakHour?'#8c82f2':'#555'}}>
+                    {h}
+                  </div>
+                ))}
+              </div>
+            </div>
             <div className={styles.analyticsGrid}>
-              {Object.entries(modelStats).map(([model, data]) => (
-                <div key={model} className={styles.analyticsCard}>
-                  <h3 style={{color: '#f5b942'}}>{model}</h3>
-                  <div className={styles.perfStat}><span>Requests Handled:</span> <strong>{data.count}</strong></div>
-                  <div className={styles.perfStat}><span>Total Tokens:</span> <strong>{data.totalTokens.toLocaleString()}</strong></div>
-                  <div className={styles.perfStat}><span>Avg. Response Time:</span> <strong>{((data.totalTime / data.count) / 1000).toFixed(2)}s</strong></div>
-                  <div className={styles.perfStat}><span>Avg. Tokens/Req:</span> <strong>{Math.round(data.totalTokens / data.count)}</strong></div>
+              <div className={styles.analyticsCard}>
+                <h3>Peak Hours Top 5</h3>
+                {[...hourlyData.map((c,h)=>({h,c}))].sort((a,b)=>b.c-a.c).slice(0,5).map(({h,c}) => (
+                  <div key={h} className={styles.progressRow}>
+                    <div className={styles.progressLabel}><span>{h}:00 — {h+1}:00</span><span>{c} reqs</span></div>
+                    <div className={styles.progressBar}><div className={styles.progressFill} style={{width:`${(c/maxHourly)*100}%`,background:'#8c82f2'}}></div></div>
+                  </div>
+                ))}
+              </div>
+              <div className={styles.analyticsCard}>
+                <h3>Traffic Insights</h3>
+                <div className={styles.perfStat}><span>Peak Hour:</span><strong>{peakHour}:00 — {peakHour+1}:00</strong></div>
+                <div className={styles.perfStat}><span>Peak Requests:</span><strong>{hourlyData[peakHour]}</strong></div>
+                <div className={styles.perfStat}><span>Quiet Hours (0 reqs):</span><strong>{hourlyData.filter(x=>x===0).length}</strong></div>
+                <div className={styles.perfStat}><span>Active Hours:</span><strong>{hourlyData.filter(x=>x>0).length} / 24</strong></div>
+                <div className={styles.perfStat}><span>Avg Reqs/Active Hour:</span><strong>{(totalRequests / Math.max(hourlyData.filter(x=>x>0).length,1)).toFixed(1)}</strong></div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ══ FINGERPRINT SCORE ══ */}
+        {activeTab === 'fingerprint' && (
+          <div className={styles.sectionFadeIn}>
+            <header className={styles.pageHeader}>
+              <div><h1>🔏 User Fingerprints</h1><p>Har unique device ka stable fingerprint ID + engagement score.</p></div>
+              <div className={styles.pageHeaderRight}>
+                <span style={{fontSize:'13px',color:'#666'}}>{fingerprintData.length} unique users</span>
+              </div>
+            </header>
+            <div className={styles.fingerprintGrid}>
+              {fingerprintData.map((user, i) => (
+                <div key={user.id} className={styles.fingerprintCard}>
+                  <div className={styles.fingerprintHeader}>
+                    <div>
+                      <div style={{fontSize:'18px',marginBottom:'4px'}}>{user.os?.includes('Mac')||user.os?.includes('iOS')?'🍎':user.os?.includes('Android')?'🤖':'💻'} {user.userName}</div>
+                      <div className={styles.fingerprintId}>{user.device} | FP: {user.id}</div>
+                    </div>
+                    <div>
+                      <div className={`${styles.fingerprintScore} ${user.score>=70?styles.scoreHigh:user.score>=40?styles.scoreMid:styles.scoreLow}`}>{user.score}</div>
+                      <div style={{fontSize:'9px',color:'#555',textAlign:'right'}}>SCORE</div>
+                    </div>
+                  </div>
+                  <div className={styles.fingerprintMeta}>
+                    OS: {user.os} • {user.browser}<br/>
+                    Messages: <strong style={{color:'#e6e6fa'}}>{user.messages.length}</strong> &nbsp;•&nbsp;
+                    Avg tokens: <strong style={{color:'#f5b942'}}>{user.avgTokens}</strong><br/>
+                    Avg speed: <strong style={{color:'#00e5ff'}}>{user.avgSpeed}s</strong> &nbsp;•&nbsp;
+                    Roast: <strong style={{color:'#ff4d4f'}}>{user.roastRatio}%</strong>
+                  </div>
+                  <div className={styles.progressBar}>
+                    <div className={styles.progressFill} style={{width:`${user.score}%`,background:user.score>=70?'#00ff80':user.score>=40?'#f5b942':'#ff4d4f'}}></div>
+                  </div>
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* 🌍 SECTION 6: GEO & LOCAL (NEW) */}
+        {/* ══ WORD CLOUD ══ */}
+        {activeTab === 'wordcloud' && (
+          <div className={styles.sectionFadeIn}>
+            <header className={styles.pageHeader}>
+              <div><h1>☁️ Word Cloud</h1><p>Sabse zyada use hone wale words user prompts mein.</p></div>
+            </header>
+            <div className={styles.analyticsCard}>
+              <h3>Top Prompt Words</h3>
+              <div className={styles.wordCloud}>
+                {wordFreq.map(([word, count], i) => {
+                  const ratio = count / maxWordFreq;
+                  const size = Math.round(11 + ratio * 22);
+                  const opacity = 0.5 + ratio * 0.5;
+                  const color = wordColors[i % wordColors.length];
+                  return (
+                    <span
+                      key={word}
+                      className={styles.wordTag}
+                      style={{
+                        fontSize: `${size}px`,
+                        background: `${color}20`,
+                        color, opacity,
+                        border: `1px solid ${color}40`,
+                      }}
+                      title={`"${word}" — ${count} times`}
+                    >
+                      {word}
+                    </span>
+                  );
+                })}
+                {wordFreq.length === 0 && <span style={{color:'#555'}}>Koi data nahi abhi 🤷</span>}
+              </div>
+            </div>
+            <div className={styles.analyticsGrid} style={{marginTop:'22px'}}>
+              <div className={styles.analyticsCard}>
+                <h3>Top 10 Words</h3>
+                {wordFreq.slice(0,10).map(([word,count]) => (
+                  <div key={word} className={styles.progressRow}>
+                    <div className={styles.progressLabel}><span style={{fontWeight:'600'}}>{word}</span><span>{count}×</span></div>
+                    <div className={styles.progressBar}><div className={styles.progressFill} style={{width:`${(count/maxWordFreq)*100}%`,background:'#8c82f2'}}></div></div>
+                  </div>
+                ))}
+              </div>
+              <div className={styles.analyticsCard}>
+                <h3>Word Stats</h3>
+                <div className={styles.perfStat}><span>Total Unique Words:</span><strong>{wordFreq.length}</strong></div>
+                <div className={styles.perfStat}><span>Most Used Word:</span><strong style={{color:'#8c82f2'}}>"{wordFreq[0]?.[0]||'N/A'}"</strong></div>
+                <div className={styles.perfStat}><span>Top Word Count:</span><strong>{wordFreq[0]?.[1]||0}×</strong></div>
+                <div className={styles.perfStat}><span>Total Prompts Analyzed:</span><strong>{logs.filter(l=>l.prompt).length}</strong></div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ══ RESPONSE QUALITY METER ══ */}
+        {activeTab === 'quality' && (
+          <div className={styles.sectionFadeIn}>
+            <header className={styles.pageHeader}>
+              <div><h1>📈 Response Quality Meter</h1><p>Tokens per second — model ki actual speed aur efficiency.</p></div>
+            </header>
+            <div className={styles.analyticsGrid}>
+              {qualityStats.map(stat => {
+                const maxTps = Math.max(...qualityStats.map(s=>Number(s.tokensPerSec)), 1);
+                const bar = (Number(stat.tokensPerSec) / maxTps) * 100;
+                return (
+                  <div key={stat.model} className={styles.analyticsCard}>
+                    <h3 style={{color:'#00e5ff'}}>{stat.model}</h3>
+                    <div style={{fontSize:'36px',fontWeight:'900',color:'#fff',margin:'8px 0'}}>{stat.tokensPerSec}<span style={{fontSize:'14px',color:'#666',fontWeight:'400'}}> tok/s</span></div>
+                    <div className={styles.progressBar} style={{marginBottom:'16px'}}>
+                      <div className={styles.progressFill} style={{width:`${bar}%`,background:`linear-gradient(90deg,#8c82f2,#00e5ff)`}}></div>
+                    </div>
+                    <div className={styles.perfStat}><span>Requests:</span><strong>{stat.count}</strong></div>
+                    <div className={styles.perfStat}><span>Avg Tokens/Req:</span><strong>{stat.avgTokens}</strong></div>
+                  </div>
+                );
+              })}
+              {qualityStats.length === 0 && <div className={styles.analyticsCard}><p style={{color:'#555'}}>Data nahi mila abhi.</p></div>}
+            </div>
+          </div>
+        )}
+
+        {/* ══ HARDWARE LEADERBOARD ══ */}
+        {activeTab === 'hardware' && (
+          <div className={styles.sectionFadeIn}>
+            <header className={styles.pageHeader}>
+              <div><h1>🖥️ Hardware Leaderboard</h1><p>Sabse powerful devices jo Aivox use kar rahe hain — CPU × RAM score.</p></div>
+            </header>
+            <div className={styles.leaderboardList}>
+              {hwLeaderboard.map((hw, i) => (
+                <div key={hw.device + i} className={styles.leaderboardItem}>
+                  <div className={`${styles.leaderboardRank} ${i===0?styles.rankGold:i===1?styles.rankSilver:i===2?styles.rankBronze:''}`}>
+                    {i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}
+                  </div>
+                  <div className={styles.leaderboardInfo}>
+                    <div className={styles.leaderboardName}>{hw.device}</div>
+                    <div className={styles.leaderboardSub}>{hw.os} • {hw.cpu} CPU cores • {hw.ram} GB RAM</div>
+                  </div>
+                  <div className={styles.leaderboardStat}>
+                    <div className={styles.leaderboardStatVal}>{hw.powerScore}</div>
+                    <div className={styles.leaderboardStatLabel}>Power Score</div>
+                  </div>
+                  <div className={styles.leaderboardStat} style={{marginLeft:'12px'}}>
+                    <div className={styles.leaderboardStatVal} style={{color:'#f5b942'}}>{hw.count}</div>
+                    <div className={styles.leaderboardStatLabel}>Sessions</div>
+                  </div>
+                </div>
+              ))}
+              {hwLeaderboard.length === 0 && <p style={{color:'#555',textAlign:'center'}}>Hardware data nahi mila. CPU/RAM tracking check karo.</p>}
+            </div>
+          </div>
+        )}
+
+        {/* ══ ERROR MONITOR ══ */}
+        {activeTab === 'errors' && (
+          <div className={styles.sectionFadeIn}>
+            <header className={styles.pageHeader}>
+              <div><h1>⚠️ Error & Fail Monitor</h1><p>Failed requests, slow responses, aur model fallback tracking.</p></div>
+            </header>
+            <div className={styles.errorMonitor} style={{marginBottom:'24px'}}>
+              <div className={styles.errorCard}>
+                <div className={styles.errorLabel}>Total Fails</div>
+                <div className={`${styles.errorRate} ${failedLogs.length>0?styles.statusBad:styles.statusGood}`}>{failedLogs.length}</div>
+                <div className={styles.errorSubText}>Model = "Failed" ya empty response</div>
+              </div>
+              <div className={styles.errorCard}>
+                <div className={styles.errorLabel}>Fail Rate</div>
+                <div className={`${styles.errorRate} ${failRate>5?styles.statusBad:failRate>2?styles.statusWarn:styles.statusGood}`}>{failRate}%</div>
+                <div className={styles.errorSubText}>Of total {totalRequests} requests</div>
+              </div>
+              <div className={styles.errorCard}>
+                <div className={styles.errorLabel}>Slow Responses</div>
+                <div className={`${styles.errorRate} ${slowLogs.length>5?styles.statusWarn:styles.statusGood}`}>{slowLogs.length}</div>
+                <div className={styles.errorSubText}>&gt;5 seconds response time</div>
+              </div>
+              <div className={styles.errorCard}>
+                <div className={styles.errorLabel}>Slow Rate</div>
+                <div className={`${styles.errorRate} ${slowRate>10?styles.statusBad:styles.statusWarn}`}>{slowRate}%</div>
+                <div className={styles.errorSubText}>Of all requests above 5s</div>
+              </div>
+            </div>
+            <div className={styles.analyticsGrid}>
+              <div className={styles.analyticsCard}>
+                <h3>Model Fallback Chain</h3>
+                {Object.entries(modelStats).sort((a,b)=>b[1].count-a[1].count).map(([model,d]) => (
+                  <div key={model} className={styles.perfStat}>
+                    <span style={{color: model==='Failed'?'#ff4d4f':'inherit'}}>{model}</span>
+                    <strong>{d.count} reqs {model==='Failed'?'❌':d.count===Object.values(modelStats).sort((a,b)=>b.count-a.count)[0]?.count?'✅':''}</strong>
+                  </div>
+                ))}
+              </div>
+              <div className={styles.analyticsCard}>
+                <h3>Slowest Requests (Top 5)</h3>
+                {[...logs].sort((a,b)=>(b.responseTimeMs||0)-(a.responseTimeMs||0)).slice(0,5).map(log => (
+                  <div key={log.id} className={styles.perfStat}>
+                    <span style={{fontSize:'11px',color:'#888'}}>{new Date(log.timestamp).toLocaleTimeString()} — {log.device?.slice(0,20)}</span>
+                    <strong style={{color:'#f5b942'}}>{((log.responseTimeMs||0)/1000).toFixed(1)}s</strong>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ══ CONVERSATION DEPTH ══ */}
+        {activeTab === 'depth' && (
+          <div className={styles.sectionFadeIn}>
+            <header className={styles.pageHeader}>
+              <div><h1>💬 Conversation Depth</h1><p>Har user ne kitne messages bheje — engagement ka asli measure.</p></div>
+            </header>
+            <div className={styles.analyticsGrid} style={{marginBottom:'24px'}}>
+              <div className={styles.analyticsCard}>
+                <h3>Sessions by Message Count</h3>
+                <div className={styles.depthChart}>
+                  {Object.entries(depthBuckets).map(([label, count], i) => (
+                    <div key={label} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',position:'relative',height:'100%'}}>
+                      <div
+                        className={styles.depthBar}
+                        style={{
+                          width:'100%',
+                          height: `${Math.max(4,(count/maxDepth)*100)}%`,
+                          background: depthColors[i],
+                          opacity: 0.85,
+                        }}
+                      >
+                        <span className={styles.depthBarVal}>{count}</span>
+                      </div>
+                      <span style={{fontSize:'10px',color:'#666',marginTop:'6px',textAlign:'center'}}>{label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className={styles.analyticsCard}>
+                <h3>Depth Stats</h3>
+                <div className={styles.perfStat}><span>Total Sessions:</span><strong>{userList.length}</strong></div>
+                <div className={styles.perfStat}><span>Avg Msgs/Session:</span><strong>{userList.length ? (totalRequests/userList.length).toFixed(1) : 0}</strong></div>
+                <div className={styles.perfStat}><span>1-msg users (Bounce):</span><strong>{depthBuckets['1']}</strong></div>
+                <div className={styles.perfStat}><span>Power Users (10+):</span><strong style={{color:'#00ff80'}}>{depthBuckets['10+']}</strong></div>
+                <div className={styles.perfStat}><span>Max Session Depth:</span><strong>{Math.max(...userList.map(u=>u.messages.length),0)}</strong></div>
+              </div>
+            </div>
+            <div className={styles.analyticsCard}>
+              <h3>Most Active Sessions</h3>
+              {userList.slice(0,8).map((user,i) => (
+                <div key={user.id} className={styles.progressRow}>
+                  <div className={styles.progressLabel}>
+                    <span>{user.userName} ({user.device})</span>
+                    <span style={{color:'#8c82f2',fontWeight:'700'}}>{user.messages.length} msgs</span>
+                  </div>
+                  <div className={styles.progressBar}>
+                    <div className={styles.progressFill} style={{width:`${(user.messages.length/Math.max(...userList.map(u=>u.messages.length),1))*100}%`,background:'#8c82f2'}}></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ══ ANALYTICS REPORT ══ */}
+        {activeTab === 'report' && (
+          <div className={styles.sectionFadeIn}>
+            <div className={styles.reportHeader}>
+              <div>
+                <p className={styles.reportTitle}>📋 Aivox Analytics Report</p>
+                <p className={styles.reportMeta}>Generated: {new Date().toLocaleString()} • {totalRequests} total events</p>
+              </div>
+              <button className={styles.printBtn} onClick={() => window.print()}>🖨️ Print / Save PDF</button>
+            </div>
+
+            <div className={styles.reportGrid}>
+              <div className={styles.reportCard}><div className={`${styles.reportCardVal} ${styles.normalColor}`}>{totalRequests}</div><div className={styles.reportCardLabel}>Total Requests</div></div>
+              <div className={styles.reportCard}><div className={`${styles.reportCardVal} ${styles.tokenColor}`}>{totalTokens.toLocaleString()}</div><div className={styles.reportCardLabel}>Tokens Used</div></div>
+              <div className={styles.reportCard}><div className={`${styles.reportCardVal} ${styles.speedColor}`}>{avgTimeSec}s</div><div className={styles.reportCardLabel}>Avg Speed</div></div>
+              <div className={styles.reportCard}><div className={`${styles.reportCardVal}`} style={{color:'#00ff80'}}>{uniqueUsers}</div><div className={styles.reportCardLabel}>Unique Devices</div></div>
+              <div className={styles.reportCard}><div className={`${styles.reportCardVal} ${styles.roastColor}`}>{roasts}</div><div className={styles.reportCardLabel}>Roast Requests</div></div>
+              <div className={styles.reportCard}><div className={styles.reportCardVal} style={{color: failRate>5?'#ff4d4f':'#00ff80'}}>{failRate}%</div><div className={styles.reportCardLabel}>Fail Rate</div></div>
+            </div>
+
+            <div className={styles.reportSection}>
+              <h4>Top Performers</h4>
+              <div className={styles.reportRow}><span className={styles.reportRowLabel}>Top OS</span><span className={styles.reportRowVal}>{topOS?.[0]||'N/A'} ({topOS?.[1]||0} users)</span></div>
+              <div className={styles.reportRow}><span className={styles.reportRowLabel}>Top Browser</span><span className={styles.reportRowVal}>{topBrowser?.[0]||'N/A'} ({topBrowser?.[1]||0} users)</span></div>
+              <div className={styles.reportRow}><span className={styles.reportRowLabel}>Top Timezone</span><span className={styles.reportRowVal}>{topTimezone?.[0]||'N/A'} ({topTimezone?.[1]||0} users)</span></div>
+              <div className={styles.reportRow}><span className={styles.reportRowLabel}>Top AI Model</span><span className={styles.reportRowVal}>{topModel?.[0]||'N/A'} ({topModel?.[1]?.count||0} reqs)</span></div>
+              <div className={styles.reportRow}><span className={styles.reportRowLabel}>Peak Hour</span><span className={styles.reportRowVal}>{peakHour}:00 — {hourlyData[peakHour]} requests</span></div>
+              <div className={styles.reportRow}><span className={styles.reportRowLabel}>Most Used Word</span><span className={styles.reportRowVal}>"{wordFreq[0]?.[0]||'N/A'}" ({wordFreq[0]?.[1]||0}×)</span></div>
+            </div>
+
+            <div className={styles.reportSection}>
+              <h4>Token Economics</h4>
+              <div className={styles.reportRow}><span className={styles.reportRowLabel}>Total Input Tokens</span><span className={styles.reportRowVal}>{totalInputTokens.toLocaleString()}</span></div>
+              <div className={styles.reportRow}><span className={styles.reportRowLabel}>Total Output Tokens</span><span className={styles.reportRowVal}>{totalOutputTokens.toLocaleString()}</span></div>
+              <div className={styles.reportRow}><span className={styles.reportRowLabel}>Input : Output Ratio</span><span className={styles.reportRowVal}>1 : {totalInputTokens ? (totalOutputTokens/totalInputTokens).toFixed(2) : 0}</span></div>
+              <div className={styles.reportRow}><span className={styles.reportRowLabel}>Avg Tokens / Request</span><span className={styles.reportRowVal}>{totalRequests ? Math.round(totalTokens/totalRequests) : 0}</span></div>
+            </div>
+
+            <div className={styles.reportSection}>
+              <h4>Model Performance</h4>
+              {Object.entries(modelStats).map(([model, d]) => (
+                <div key={model} className={styles.reportRow}>
+                  <span className={styles.reportRowLabel}>{model}</span>
+                  <span className={styles.reportRowVal}>{d.count} reqs • {((d.totalTime/d.count)/1000).toFixed(2)}s avg</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ══ DEVICES ══ */}
+        {activeTab === 'devices' && (
+          <div className={styles.sectionFadeIn}>
+            <header className={styles.pageHeader}><div><h1>📱 Device Demographics</h1><p>OS aur browser breakdown.</p></div></header>
+            <div className={styles.analyticsGrid}>
+              <div className={styles.analyticsCard}>
+                <h3>Operating Systems</h3>
+                {Object.entries(osStats).sort((a,b)=>b[1]-a[1]).map(([os,count]) => (
+                  <div key={os} className={styles.progressRow}>
+                    <div className={styles.progressLabel}><span>{os}</span><span>{count}</span></div>
+                    <div className={styles.progressBar}><div className={styles.progressFill} style={{width:`${(count/totalRequests)*100}%`,background:'#8c82f2'}}></div></div>
+                  </div>
+                ))}
+              </div>
+              <div className={styles.analyticsCard}>
+                <h3>Browsers</h3>
+                {Object.entries(browserStats).sort((a,b)=>b[1]-a[1]).map(([browser,count]) => (
+                  <div key={browser} className={styles.progressRow}>
+                    <div className={styles.progressLabel}><span>{browser}</span><span>{count}</span></div>
+                    <div className={styles.progressBar}><div className={styles.progressFill} style={{width:`${(count/totalRequests)*100}%`,background:'#00e5ff'}}></div></div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ══ PERFORMANCE ══ */}
+        {activeTab === 'performance' && (
+          <div className={styles.sectionFadeIn}>
+            <header className={styles.pageHeader}><div><h1>⚡ AI Model Performance</h1><p>Speed, tokens, fallback analysis.</p></div></header>
+            <div className={styles.analyticsGrid}>
+              {Object.entries(modelStats).map(([model,data]) => (
+                <div key={model} className={styles.analyticsCard}>
+                  <h3 style={{color:'#f5b942'}}>{model}</h3>
+                  <div className={styles.perfStat}><span>Requests:</span><strong>{data.count}</strong></div>
+                  <div className={styles.perfStat}><span>Total Tokens:</span><strong>{data.totalTokens.toLocaleString()}</strong></div>
+                  <div className={styles.perfStat}><span>Avg Response:</span><strong>{((data.totalTime/data.count)/1000).toFixed(2)}s</strong></div>
+                  <div className={styles.perfStat}><span>Avg Tokens/Req:</span><strong>{Math.round(data.totalTokens/data.count)}</strong></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ══ GEO ══ */}
         {activeTab === 'geography' && (
           <div className={styles.sectionFadeIn}>
-            <header className={styles.pageHeader}><div><h1>🌍 Geography & Localization</h1><p>User Timezones and Language Preferences.</p></div></header>
+            <header className={styles.pageHeader}><div><h1>🌍 Geography & Localization</h1><p>Timezones aur languages.</p></div></header>
             <div className={styles.analyticsGrid}>
               <div className={styles.analyticsCard}>
                 <h3>Top Timezones</h3>
-                {Object.entries(timezoneStats).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([tz, count]) => (
-                  <div key={tz} className={styles.progressRow}><div className={styles.progressLabel}><span>{tz}</span><span>{count}</span></div><div className={styles.progressBar}><div className={styles.progressFill} style={{width: `${(count/totalRequests)*100}%`, background: '#00ff80'}}></div></div></div>
+                {Object.entries(timezoneStats).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([tz,count]) => (
+                  <div key={tz} className={styles.progressRow}>
+                    <div className={styles.progressLabel}><span>{tz}</span><span>{count}</span></div>
+                    <div className={styles.progressBar}><div className={styles.progressFill} style={{width:`${(count/totalRequests)*100}%`,background:'#00ff80'}}></div></div>
+                  </div>
                 ))}
               </div>
               <div className={styles.analyticsCard}>
                 <h3>System Languages</h3>
-                {Object.entries(langStats).sort((a,b)=>b[1]-a[1]).map(([lang, count]) => (
-                  <div key={lang} className={styles.progressRow}><div className={styles.progressLabel}><span>{lang}</span><span>{count}</span></div><div className={styles.progressBar}><div className={styles.progressFill} style={{width: `${(count/totalRequests)*100}%`, background: '#f5b942'}}></div></div></div>
+                {Object.entries(langStats).sort((a,b)=>b[1]-a[1]).map(([lang,count]) => (
+                  <div key={lang} className={styles.progressRow}>
+                    <div className={styles.progressLabel}><span>{lang}</span><span>{count}</span></div>
+                    <div className={styles.progressBar}><div className={styles.progressFill} style={{width:`${(count/totalRequests)*100}%`,background:'#f5b942'}}></div></div>
+                  </div>
                 ))}
               </div>
             </div>
           </div>
         )}
 
-        {/* 🔥 SECTION 7: ROASTER ANALYTICS (NEW) */}
+        {/* ══ ROASTER ══ */}
         {activeTab === 'roaster' && (
           <div className={styles.sectionFadeIn}>
-            <header className={styles.pageHeader}><div><h1>🔥 Roaster vs Normal Mode</h1><p>Deep dive into personality usage.</p></div></header>
+            <header className={styles.pageHeader}><div><h1>🔥 Roaster vs Normal</h1><p>Mode usage deep dive.</p></div></header>
             <div className={styles.analyticsGrid}>
               <div className={styles.analyticsCard}>
-                <h3 style={{color: '#ff4d4f'}}>Roast Mode Usage</h3>
-                <div className={styles.perfStat}><span>Total Roast Prompts:</span> <strong style={{color: '#ff4d4f'}}>{roasts}</strong></div>
-                <div className={styles.perfStat}><span>Tokens Burned in Roast:</span> <strong>{roastTokens.toLocaleString()}</strong></div>
-                <div className={styles.perfStat}><span>Avg Tokens/Roast:</span> <strong>{roasts ? Math.round(roastTokens/roasts) : 0}</strong></div>
+                <h3 style={{color:'#ff4d4f'}}>Roast Mode</h3>
+                <div className={styles.perfStat}><span>Total Prompts:</span><strong style={{color:'#ff4d4f'}}>{roasts}</strong></div>
+                <div className={styles.perfStat}><span>Tokens Burned:</span><strong>{roastTokens.toLocaleString()}</strong></div>
+                <div className={styles.perfStat}><span>Avg Tokens/Roast:</span><strong>{roasts?Math.round(roastTokens/roasts):0}</strong></div>
+                <div className={styles.perfStat}><span>% of All Requests:</span><strong>{totalRequests?((roasts/totalRequests)*100).toFixed(1):0}%</strong></div>
               </div>
               <div className={styles.analyticsCard}>
-                <h3 style={{color: '#8c82f2'}}>Normal Mode Usage</h3>
-                <div className={styles.perfStat}><span>Total Normal Prompts:</span> <strong style={{color: '#8c82f2'}}>{normalCount}</strong></div>
-                <div className={styles.perfStat}><span>Tokens Used Normally:</span> <strong>{normalTokens.toLocaleString()}</strong></div>
-                <div className={styles.perfStat}><span>Avg Tokens/Normal:</span> <strong>{normalCount ? Math.round(normalTokens/normalCount) : 0}</strong></div>
+                <h3 style={{color:'#8c82f2'}}>Normal Mode</h3>
+                <div className={styles.perfStat}><span>Total Prompts:</span><strong style={{color:'#8c82f2'}}>{normalCount}</strong></div>
+                <div className={styles.perfStat}><span>Tokens Used:</span><strong>{normalTokens.toLocaleString()}</strong></div>
+                <div className={styles.perfStat}><span>Avg Tokens/Normal:</span><strong>{normalCount?Math.round(normalTokens/normalCount):0}</strong></div>
+                <div className={styles.perfStat}><span>% of All Requests:</span><strong>{totalRequests?((normalCount/totalRequests)*100).toFixed(1):0}%</strong></div>
               </div>
             </div>
           </div>
         )}
 
-        {/* 📡 SECTION 8: NETWORK & PRIVACY (NEW) */}
+        {/* ══ NETWORK ══ */}
         {activeTab === 'network' && (
           <div className={styles.sectionFadeIn}>
-            <header className={styles.pageHeader}><div><h1>📡 Network & Environment</h1><p>Connection speeds and browser settings.</p></div></header>
+            <header className={styles.pageHeader}><div><h1>📡 Network & Environment</h1><p>Connection types aur browser settings.</p></div></header>
             <div className={styles.analyticsGrid}>
               <div className={styles.analyticsCard}>
                 <h3>Connection Type</h3>
-                {Object.entries(networkStats).map(([net, count]) => (
-                  <div key={net} className={styles.perfStat}><span style={{textTransform:'uppercase'}}>{net}</span> <strong>{count} Users</strong></div>
+                {Object.entries(networkStats).map(([net,count]) => (
+                  <div key={net} className={styles.perfStat}><span style={{textTransform:'uppercase'}}>{net}</span><strong>{count} Users</strong></div>
                 ))}
               </div>
               <div className={styles.analyticsCard}>
-                <h3>Environment Settings</h3>
-                {Object.entries(displayModeStats).map(([mode, count]) => (
-                  <div key={mode} className={styles.perfStat}><span>Display: {mode}</span> <strong>{count}</strong></div>
+                <h3>Environment</h3>
+                {Object.entries(displayModeStats).map(([mode,count]) => (
+                  <div key={mode} className={styles.perfStat}><span>Display: {mode}</span><strong>{count}</strong></div>
                 ))}
-                {Object.entries(cookieStats).map(([cookie, count]) => (
-                  <div key={cookie} className={styles.perfStat}><span>Cookies: {cookie}</span> <strong>{count}</strong></div>
+                {Object.entries(cookieStats).map(([cookie,count]) => (
+                  <div key={cookie} className={styles.perfStat}><span>Cookies: {cookie}</span><strong>{count}</strong></div>
                 ))}
               </div>
             </div>
           </div>
         )}
 
-        {/* 💰 SECTION 9: TOKEN ECONOMICS (NEW) */}
+        {/* ══ TOKEN ECONOMICS ══ */}
         {activeTab === 'economics' && (
           <div className={styles.sectionFadeIn}>
-            <header className={styles.pageHeader}><div><h1>💰 Token Economics</h1><p>Analyze how your API limits are being spent.</p></div></header>
+            <header className={styles.pageHeader}><div><h1>💰 Token Economics</h1><p>API spend analysis.</p></div></header>
             <div className={styles.analyticsGrid}>
               <div className={styles.analyticsCard}>
-                <h3 style={{color: '#00e5ff'}}>Input vs Output Ratio</h3>
-                <div className={styles.perfStat}><span>Total Input (User) Tokens:</span> <strong>{totalInputTokens.toLocaleString()}</strong></div>
-                <div className={styles.perfStat}><span>Total Output (AI) Tokens:</span> <strong>{totalOutputTokens.toLocaleString()}</strong></div>
-                <div className={styles.perfStat}><span>Ratio (Input : Output):</span> <strong>1 : {totalInputTokens ? (totalOutputTokens/totalInputTokens).toFixed(2) : 0}</strong></div>
+                <h3 style={{color:'#00e5ff'}}>Input vs Output</h3>
+                <div className={styles.perfStat}><span>Total Input (User):</span><strong>{totalInputTokens.toLocaleString()}</strong></div>
+                <div className={styles.perfStat}><span>Total Output (AI):</span><strong>{totalOutputTokens.toLocaleString()}</strong></div>
+                <div className={styles.perfStat}><span>Ratio (In:Out):</span><strong>1 : {totalInputTokens?(totalOutputTokens/totalInputTokens).toFixed(2):0}</strong></div>
+                <div className={styles.perfStat}><span>Total Combined:</span><strong>{totalTokens.toLocaleString()}</strong></div>
+              </div>
+              <div className={styles.analyticsCard}>
+                <h3 style={{color:'#f5b942'}}>Cost Estimation</h3>
+                <div className={styles.perfStat}><span>Est. Input Cost (Gemini):</span><strong>${((totalInputTokens/1000)*0.00025).toFixed(4)}</strong></div>
+                <div className={styles.perfStat}><span>Est. Output Cost (Gemini):</span><strong>${((totalOutputTokens/1000)*0.00075).toFixed(4)}</strong></div>
+                <div className={styles.perfStat}><span>Groq (Free tier):</span><strong style={{color:'#00ff80'}}>$0.00</strong></div>
+                <div className={styles.perfStat}><span>Avg Tokens/Request:</span><strong>{totalRequests?Math.round(totalTokens/totalRequests):0}</strong></div>
               </div>
             </div>
           </div>
         )}
 
-        {/* 🧠 SECTION 10: PROMPT INTELLIGENCE (NEW) */}
+        {/* ══ PROMPT INTEL ══ */}
         {activeTab === 'prompts' && (
           <div className={styles.sectionFadeIn}>
-            <header className={styles.pageHeader}><div><h1>🧠 Prompt Intelligence</h1><p>Longest and most complex user queries.</p></div></header>
+            <header className={styles.pageHeader}><div><h1>🧠 Prompt Intelligence</h1><p>Longest aur most complex queries.</p></div></header>
             <div className={styles.tableContainer}>
               <div className={styles.tableWrapper}>
                 <table className={styles.adminTable}>
-                  <thead><tr><th>Length (Chars)</th><th>User Prompt</th><th>AI Tokens Used</th></tr></thead>
+                  <thead><tr><th>Length</th><th>User Prompt</th><th>Tokens</th><th>Model</th></tr></thead>
                   <tbody>
-                    {longestPrompts.map((log) => (
+                    {longestPrompts.map(log => (
                       <tr key={log.id}>
                         <td><strong style={{color:'#f5b942'}}>{log.prompt?.length}</strong></td>
-                        <td style={{maxWidth: '500px', whiteSpace: 'normal', fontStyle: 'italic', color: '#cdd6f4'}}>"{log.prompt}"</td>
+                        <td style={{maxWidth:'480px',whiteSpace:'normal',fontStyle:'italic',color:'#cdd6f4',fontSize:'13px'}}>"{log.prompt}"</td>
                         <td>{log.totalTokens}</td>
+                        <td><span style={{color:'#8c82f2',fontSize:'11px',fontWeight:'700'}}>{log.model}</span></td>
                       </tr>
                     ))}
                   </tbody>
@@ -355,24 +1030,43 @@ function Admin() {
           </div>
         )}
 
-        {/* SECTION 5: DEEP SYSTEM LOGS */}
+        {/* ══ SYSTEM LOGS ══ */}
         {activeTab === 'system' && (
           <div className={styles.sectionFadeIn}>
-            <header className={styles.pageHeader} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div><h1>⚙️ Deep Tracking Logs</h1><p>Advanced Hardware, Network, and Environment Data.</p></div>
-              <button onClick={downloadCSV} style={{ background: '#8c82f2', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>📥 Export CSV</button>
+            <header className={styles.pageHeader}>
+              <div><h1>⚙️ System Logs</h1><p>Deep hardware, network, environment data.</p></div>
+              <div className={styles.pageHeaderRight}>
+                <button onClick={fetchData} className={styles.actionBtn}>🔄 Refresh</button>
+                <button onClick={downloadCSV} className={`${styles.actionBtn} ${styles.actionBtnSuccess}`}>📥 CSV</button>
+              </div>
             </header>
             <div className={styles.tableContainer}>
               <div className={styles.tableWrapper}>
                 <table className={styles.adminTable}>
-                  <thead><tr><th>Time & Zone</th><th>Device & Hardware</th><th>Network & Privacy</th><th>Performance</th></tr></thead>
+                  <thead><tr><th>Time & Zone</th><th>User & HW</th><th>Network</th><th>Performance</th></tr></thead>
                   <tbody>
-                    {logs.map((log) => (
+                    {logs.map(log => (
                       <tr key={log.id}>
-                        <td className={styles.timeCol}>{new Date(log.timestamp).toLocaleString()}<div className={styles.subText}>🌍 {log.timezone}</div></td>
-                        <td><div className={styles.sysTag}>{log.device || "Unknown"}</div><div className={styles.subText}><strong>OS:</strong> {log.os}<br/><strong>RAM:</strong> {log.ramMemory || 'N/A'} | <strong>CPU:</strong> {log.cpuCores || 'N/A'} Cores<br/><strong>Screen:</strong> {log.screenResolution} ({log.orientation})</div></td>
-                        <td><div className={styles.sysTag} style={{background: '#1a3a2a', color: '#00ff80'}}>📶 {log.network?.toUpperCase() || 'WIFI'}</div><div className={styles.subText}><strong>Browser:</strong> {log.browserVendor} ({log.language})<br/><strong>Mode:</strong> {log.displayMode}<br/><strong>Ref:</strong> {log.referrer === "" ? "Direct Link" : log.referrer?.substring(0,20)}</div></td>
-                        <td><div className={styles.tokenTotal}>Tokens: {log.totalTokens}</div><div className={styles.speedColor}>⚡ {log.responseTimeMs ? (log.responseTimeMs / 1000).toFixed(2) + "s" : "N/A"}</div><div className={styles.subText}>🤖 {log.model}</div></td>
+                        <td className={styles.timeCol}>
+                          {new Date(log.timestamp).toLocaleString()}
+                          <div className={styles.subText}>🌍 {log.timezone}</div>
+                          <div style={{fontSize:'10px',color:'#444',marginTop:'2px',fontFamily:'monospace'}}>FP: {makeFingerprint(log)}</div>
+                        </td>
+                        <td>
+                          {/* 🔥 User Name Displayed Here */}
+                          <div className={styles.sysTag} style={{background: '#8c82f2', color: '#fff'}}>{log.userName || "Anonymous"}</div>
+                          <div className={styles.subText} style={{marginTop: '4px'}}><strong>Device:</strong> {log.device||"Unknown"}<br/><strong>OS:</strong> {log.os}<br/><strong>RAM:</strong> {log.ramMemory||'N/A'} | <strong>CPU:</strong> {log.cpuCores||'N/A'} cores<br/><strong>Screen:</strong> {log.screenResolution}</div>
+                        </td>
+                        <td>
+                          <div className={styles.sysTag} style={{background:'#1a3a2a',color:'#00ff80'}}>📶 {(log.network||'WIFI').toUpperCase()}</div>
+                          <div className={styles.subText}><strong>Browser:</strong> {log.browserVendor}<br/><strong>Lang:</strong> {log.language}<br/><strong>Mode:</strong> {log.displayMode}</div>
+                        </td>
+                        <td>
+                          <div className={styles.tokenTotal}>Tokens: {log.totalTokens||0}</div>
+                          <div className={styles.speedColor}>⚡ {log.responseTimeMs?(log.responseTimeMs/1000).toFixed(2)+'s':'N/A'}</div>
+                          <div className={styles.subText}>🤖 {log.model}</div>
+                          {log.isRoasterMode && <div style={{fontSize:'10px',color:'#ff4d4f',marginTop:'2px'}}>🔥 Roaster</div>}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
