@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { auth } from './firebase';
+import { auth, db } from './firebase'; // db import kiya
 import { 
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword, 
@@ -8,6 +8,8 @@ import {
   GoogleAuthProvider,
   signInWithPopup
 } from 'firebase/auth';
+// 🔥 Firestore imports add kiye
+import { doc, setDoc, getDoc } from 'firebase/firestore'; 
 import styles from './Auth.module.css';
 
 function Auth() {
@@ -22,7 +24,6 @@ function Auth() {
   const [generalMsg, setGeneralMsg] = useState('');
   const [msgType, setMsgType] = useState(''); 
 
-  // UI States
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false); 
 
@@ -44,12 +45,27 @@ function Auth() {
   };
   const strength = getPasswordStrength(password);
 
+  // 🔥 GOOGLE LOGIN W/ FIRESTORE SYNC
   const handleGoogleLogin = async () => {
     setLoading(true);
     setGeneralMsg('');
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      const cred = await signInWithPopup(auth, provider);
+      
+      // Check if user exists in Firestore, if not, create them
+      const userRef = doc(db, "users", cred.user.uid);
+      const userSnap = await getDoc(userRef);
+      
+      if (!userSnap.exists()) {
+        await setDoc(userRef, {
+          name: cred.user.displayName || 'Google User',
+          email: cred.user.email,
+          role: 'user',
+          createdAt: new Date().toISOString()
+        });
+      }
+      
       window.location.href = '/'; 
     } catch (err) {
       setMsgType('error');
@@ -60,6 +76,11 @@ function Auth() {
       }
     }
     setLoading(false);
+  };
+
+  const handleGuestLogin = () => {
+    localStorage.setItem('aivox_guest_name', 'Guest User');
+    window.location.href = '/';
   };
 
   const handleAuth = async (e) => {
@@ -74,10 +95,34 @@ function Auth() {
       if (authState === 'signup') {
         const cred = await createUserWithEmailAndPassword(auth, email, password);
         await updateProfile(cred.user, { displayName: name });
+        
+        // 🔥 SAVE NEW USER TO FIRESTORE 🔥
+        await setDoc(doc(db, "users", cred.user.uid), {
+          name: name.trim(),
+          email: email.trim(),
+          role: 'user', // Default role user rahega
+          createdAt: new Date().toISOString()
+        });
+
         window.location.href = '/profile';
+        
       } else if (authState === 'login') {
-        await signInWithEmailAndPassword(auth, email, password);
+        const cred = await signInWithEmailAndPassword(auth, email, password);
+        
+        // 🔥 SYNC OLD USERS TO FIRESTORE ON LOGIN 🔥
+        const userRef = doc(db, "users", cred.user.uid);
+        const userSnap = await getDoc(userRef);
+        if (!userSnap.exists()) {
+          await setDoc(userRef, {
+            name: cred.user.displayName || 'Aivox User',
+            email: cred.user.email,
+            role: 'user',
+            createdAt: new Date().toISOString()
+          });
+        }
+        
         window.location.href = '/';
+        
       } else if (authState === 'reset') {
         if (!email) {
           setEmailError('Please enter your email to reset password.');
@@ -87,8 +132,8 @@ function Auth() {
         await sendPasswordResetEmail(auth, email);
         setGeneralMsg('Password reset link sent! Check your email inbox.');
         setMsgType('success'); 
+        
       } else if (authState === 'guest') {
-        // 🔥 GUEST LOGIC WITH NAME
         if (!name.trim()) {
           setGeneralMsg('Please enter a nickname to continue.');
           setLoading(false);
@@ -125,7 +170,7 @@ function Auth() {
         Home
       </button>
 
-      {/* Floating Background Elements (Inki styling CSS mein aayegi) */}
+      {/* Floating Background Elements */}
       <div className={styles.bgOrb1}></div>
       <div className={styles.bgOrb2}></div>
 
@@ -153,7 +198,7 @@ function Auth() {
             </p>
           </div>
 
-          {/* GOOGLE BUTTON (Hide for Guest and Reset modes) */}
+          {/* GOOGLE BUTTON */}
           {authState !== 'reset' && authState !== 'guest' && (
             <>
               <button type="button" className={styles.googleBtn} onClick={handleGoogleLogin} disabled={loading}>
@@ -168,7 +213,7 @@ function Auth() {
           )}
 
           <form onSubmit={handleAuth} className={styles.formElement}>
-            {/* NAME FIELD (For Signup and Guest) */}
+            {/* NAME FIELD */}
             {(authState === 'signup' || authState === 'guest') && (
               <div className={styles.inputGroup}>
                 <div className={styles.inputWrapper}>
@@ -178,7 +223,7 @@ function Auth() {
               </div>
             )}
             
-            {/* EMAIL FIELD (Hidden for Guest) */}
+            {/* EMAIL FIELD */}
             {authState !== 'guest' && (
               <div className={styles.inputGroup}>
                 <div className={`${styles.inputWrapper} ${emailError ? styles.errorBorder : ''}`}>
@@ -189,7 +234,7 @@ function Auth() {
               </div>
             )}
 
-            {/* PASSWORD FIELD (Hidden for Guest and Reset) */}
+            {/* PASSWORD FIELD */}
             {authState !== 'reset' && authState !== 'guest' && (
               <div className={styles.inputGroup}>
                 <div className={`${styles.inputWrapper} ${passwordError ? styles.errorBorder : ''}`}>

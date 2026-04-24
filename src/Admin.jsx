@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { collection, getDocs, query, orderBy } from 'firebase/firestore';
+// 🔥 NAYE IMPORTS ADD KIYE HAIN: doc, deleteDoc, updateDoc (User manage karne ke liye)
+import { collection, getDocs, query, orderBy, doc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { db, auth } from './firebase'; 
 import { onAuthStateChanged } from 'firebase/auth';
 import styles from './Admin.module.css';
@@ -40,6 +41,10 @@ function Admin() {
   const [searchQuery, setSearchQuery] = useState('');
   const [chatSearchQuery, setChatSearchQuery] = useState('');
   
+  // 🔥 USER MANAGEMENT STATES (NAYA) 🔥
+  const [registeredUsers, setRegisteredUsers] = useState([]);
+  const [userSearchQuery, setUserSearchQuery] = useState('');
+  
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [countdown, setCountdown] = useState(30);
   const countdownRef = useRef(null);
@@ -61,10 +66,21 @@ function Admin() {
   const fetchData = useCallback(async () => {
     if (!isAdmin) return; // Security Check
     try {
+      // 1. Fetch Tracking Logs
       const q = query(collection(db, "aivox_tracking"), orderBy("timestamp", "desc"));
       const snap = await getDocs(q);
       const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setLogs(data);
+
+      // 2. 🔥 Fetch Registered Users (NAYA) 🔥
+      try {
+        const uSnap = await getDocs(collection(db, "users"));
+        const uData = uSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setRegisteredUsers(uData);
+      } catch (err) {
+        console.warn("Users collection reading error (might be empty or missing permissions):", err);
+      }
+
     } catch (error) {
       console.error("Error fetching data: ", error);
     } finally {
@@ -116,6 +132,37 @@ function Admin() {
     a.download = `Aivox_Analytics_${new Date().toLocaleDateString()}.csv`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
   };
+
+  // 🔥 USER MANAGEMENT ACTIONS (NAYA) 🔥
+  const handleDeleteUser = async (userId, userName) => {
+    if(window.confirm(`Are you sure you want to permanently delete user: ${userName}?`)) {
+      try {
+        await deleteDoc(doc(db, "users", userId));
+        setRegisteredUsers(prev => prev.filter(u => u.id !== userId));
+        alert(`${userName} deleted successfully.`);
+      } catch (error) {
+        alert("Failed to delete user: " + error.message);
+      }
+    }
+  };
+
+  const handleUpdateUserRole = async (userId, userName, currentRole) => {
+    const newRole = currentRole === 'admin' ? 'user' : 'admin';
+    if(window.confirm(`Change role of ${userName} to ${newRole.toUpperCase()}?`)) {
+      try {
+        await updateDoc(doc(db, "users", userId), { role: newRole });
+        setRegisteredUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u));
+        alert(`${userName} is now an ${newRole}.`);
+      } catch (error) {
+        alert("Failed to update role: " + error.message);
+      }
+    }
+  };
+
+  const filteredRegisteredUsers = registeredUsers.filter(user => 
+    (user.name || '').toLowerCase().includes(userSearchQuery.toLowerCase()) || 
+    (user.email || '').toLowerCase().includes(userSearchQuery.toLowerCase())
+  );
 
   const totalRequests = logs.length;
   const totalTokens = logs.reduce((s,l) => s + (l.totalTokens||0), 0);
@@ -237,7 +284,7 @@ function Admin() {
     if (filteredChatUsers.length > 0 && !selectedUser && window.innerWidth > 900) setSelectedUser(filteredChatUsers[0]);
   }, [filteredChatUsers, selectedUser]);
 
-  const handleTabChange = (tab) => { setActiveTab(tab); setIsMobileMenuOpen(false); setIsMobileChatView(false); setSearchQuery(''); setChatSearchQuery(''); };
+  const handleTabChange = (tab) => { setActiveTab(tab); setIsMobileMenuOpen(false); setIsMobileChatView(false); setSearchQuery(''); setChatSearchQuery(''); setUserSearchQuery(''); };
 
   // 🔥 RENDER GUARDS: CHECKING SECURITY BEFORE SHOWING UI 🔥
   if (authLoading) return (
@@ -318,7 +365,9 @@ function Admin() {
           <NavBtn tab="search">🔍 Live Search</NavBtn>
         </NavSection>
 
-        <NavSection label="Users">
+        <NavSection label="Access & Users">
+          {/* 🔥 NAYA TAB ADD KIYA 🔥 */}
+          <NavBtn tab="usermanagement">👥 User Accounts</NavBtn>
           <NavBtn tab="fingerprint">🔏 Fingerprints</NavBtn>
           <NavBtn tab="depth">💬 Conv. Depth</NavBtn>
           <NavBtn tab="heatmap">🌡️ Hour Heatmap</NavBtn>
@@ -415,6 +464,105 @@ function Admin() {
               </div>
               <div className={styles.heatmapXAxis}>
                 {hourlyData.map((_,h) => <div key={h} className={styles.heatmapXLabel}>{h}</div>)}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ══ USER MANAGEMENT TAB (NAYA SECTION) ══ */}
+        {activeTab === 'usermanagement' && (
+          <div className={styles.sectionFadeIn}>
+            <header className={styles.pageHeader}>
+              <div><h1>👥 Registered Users</h1><p>Manage all signed-up accounts, assign roles, and delete users.</p></div>
+            </header>
+
+            <div className={styles.searchBar} style={{marginBottom: '20px'}}>
+              <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input
+                type="text"
+                placeholder="Search user by name or email..."
+                value={userSearchQuery}
+                onChange={e => setUserSearchQuery(e.target.value)}
+              />
+            </div>
+
+            <div className={styles.analyticsGrid} style={{marginBottom: '24px'}}>
+              <div className={styles.analyticsCard}>
+                <h3>Total Accounts</h3>
+                <div className={styles.statValue} style={{color: '#00e5ff'}}>{registeredUsers.length}</div>
+              </div>
+              <div className={styles.analyticsCard}>
+                <h3>Admin Accounts</h3>
+                <div className={styles.statValue} style={{color: '#f5b942'}}>
+                  {registeredUsers.filter(u => u.role === 'admin' || allowedEmails.includes((u.email||'').toLowerCase())).length}
+                </div>
+              </div>
+            </div>
+
+            <div className={styles.tableContainer}>
+              <div className={styles.tableWrapper}>
+                <table className={styles.adminTable}>
+                  <thead>
+                    <tr>
+                      <th>User Details</th>
+                      <th>Email ID</th>
+                      <th>User UID</th>
+                      <th>Role</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredRegisteredUsers.map(user => {
+                      const isMasterAdmin = allowedEmails.includes((user.email||'').toLowerCase());
+                      return (
+                        <tr key={user.id}>
+                          <td>
+                            <div className={styles.sysTag} style={{background: '#8c82f2', color: '#fff'}}>{user.name || user.displayName || 'Unknown User'}</div>
+                          </td>
+                          <td style={{color: '#cdd6f4'}}>{user.email || 'No Email'}</td>
+                          <td style={{fontFamily: 'monospace', fontSize: '11px', color: '#888'}}>{user.id}</td>
+                          <td>
+                            {isMasterAdmin ? (
+                              <span className={styles.sysTag} style={{background: '#ff4d4f', color: '#fff'}}>Master Admin</span>
+                            ) : user.role === 'admin' ? (
+                              <span className={styles.sysTag} style={{background: '#f5b942', color: '#000'}}>Admin</span>
+                            ) : (
+                              <span className={styles.sysTag} style={{background: '#1a3a2a', color: '#00ff80'}}>User</span>
+                            )}
+                          </td>
+                          <td>
+                            <div style={{display: 'flex', gap: '8px'}}>
+                              {!isMasterAdmin && (
+                                <>
+                                  <button 
+                                    onClick={() => handleUpdateUserRole(user.id, user.name || user.email, user.role)}
+                                    style={{padding: '6px 10px', background: user.role === 'admin' ? '#555' : '#8c82f2', border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold'}}
+                                  >
+                                    {user.role === 'admin' ? 'Remove Admin' : 'Make Admin'}
+                                  </button>
+                                  <button 
+                                    onClick={() => handleDeleteUser(user.id, user.name || user.email)}
+                                    style={{padding: '6px 10px', background: '#ff4d4f', border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold'}}
+                                  >
+                                    Delete
+                                  </button>
+                                </>
+                              )}
+                              {isMasterAdmin && <span style={{fontSize: '11px', color: '#888'}}>Protected</span>}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {filteredRegisteredUsers.length === 0 && (
+                      <tr>
+                        <td colSpan={5} style={{textAlign: 'center', padding: '40px', color: '#888'}}>
+                          {registeredUsers.length === 0 ? "No users found in Firestore 'users' collection." : "No user matches search."}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
