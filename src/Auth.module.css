@@ -1,47 +1,317 @@
+/* =============== GLOBAL WRAPPER =============== */
 .authWrapper {
-  display: flex; justify-content: center; align-items: center;
-  height: 100vh; width: 100vw;
-  background: radial-gradient(circle at center, #1a1929 0%, #0b0a14 100%);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  width: 100vw;
+  background: radial-gradient(circle at top center, #13111C 0%, #08070B 100%);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  overflow: hidden;
+  position: relative; /* Floating orbs ke liye zaroori hai */
 }
 
+/* =============== DYNAMIC BACKGROUND (FLOATING ORBS) =============== */
+.bgOrb1 {
+  position: absolute;
+  top: -15%;
+  left: -10%;
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, rgba(140, 130, 242, 0.3) 0%, transparent 70%);
+  border-radius: 50%;
+  filter: blur(80px);
+  animation: floatOrb 12s ease-in-out infinite;
+  z-index: 0;
+}
+.bgOrb2 {
+  position: absolute;
+  bottom: -20%;
+  right: -10%;
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, rgba(254, 202, 87, 0.15) 0%, rgba(255, 107, 107, 0.1) 50%, transparent 70%);
+  border-radius: 50%;
+  filter: blur(100px);
+  animation: floatOrb 15s ease-in-out infinite reverse;
+  z-index: 0;
+}
+
+/* =============== BACK BUTTON (PREMIUM PILL) =============== */
 .backToChatBtn {
-  position: fixed; top: 25px; left: 25px;
-  background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #fff; padding: 10px 20px; border-radius: 12px;
-  cursor: pointer; transition: 0.3s;
+  position: absolute;
+  top: 30px;
+  left: 30px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent; 
+  border: 1px solid transparent; 
+  color: #8a8d9e;
+  padding: 10px 18px;
+  border-radius: 100px;
+  cursor: pointer;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  font-weight: 600;
+  font-size: 14px;
+  z-index: 10;
+}
+.backToChatBtn svg { 
+  width: 18px; 
+  height: 18px; 
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1); 
+}
+.backToChatBtn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #fff;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+.backToChatBtn:hover svg { transform: translateX(-4px); }
+
+/* =============== MAIN CONTAINER (SPLIT LAYOUT) =============== */
+.authContainer {
+  display: flex;
+  width: 90%;
+  max-width: 1050px;
+  min-height: 650px;
+  background: rgba(21, 20, 32, 0.4);
+  backdrop-filter: blur(30px);
+  border-radius: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255,255,255,0.1);
+  overflow: hidden;
+  z-index: 2; /* Background orbs ke upar rakhne ke liye */
+  animation: scaleIn 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.nameModalContent {
-  width: 90%; max-width: 400px;
-  background: rgba(21, 20, 38, 0.6); backdrop-filter: blur(20px);
-  padding: 40px; border-radius: 28px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+/* =============== LEFT SIDE (AIVOX BRANDING) =============== */
+.authDecoration {
+  flex: 1;
+  background: linear-gradient(145deg, rgba(140, 130, 242, 0.05) 0%, rgba(10, 9, 15, 0.8) 100%);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 40px;
+  position: relative;
   text-align: center;
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+}
+.brandTitle {
+  font-size: 56px;
+  font-weight: 800;
+  background: linear-gradient(135deg, #ffffff 0%, #a59df6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 15px;
+  z-index: 2;
+  letter-spacing: -1px;
+}
+.brandSubtitle {
+  color: #8a8d9e;
+  font-size: 16px;
+  line-height: 1.6;
+  z-index: 2;
+  max-width: 75%;
+}
+.glowCircle {
+  position: absolute;
+  width: 350px;
+  height: 350px;
+  background: #8c82f2;
+  filter: blur(160px);
+  opacity: 0.15;
+  border-radius: 50%;
+  z-index: 1;
+  animation: pulse 6s infinite alternate;
 }
 
-.title { color: #fff; font-size: 24px; margin-bottom: 25px; }
-
-.nameInput {
-  width: 100%; padding: 16px; margin-bottom: 15px;
-  background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 14px; color: #fff; outline: none;
+/* =============== RIGHT SIDE (FORM) =============== */
+.formContainer {
+  flex: 1.2;
+  padding: 50px 70px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.01);
 }
 
-.authBtnGroup { display: flex; flex-direction: column; gap: 12px; }
+/* =============== TYPOGRAPHY =============== */
+.formHeader { margin-bottom: 30px; text-align: center; }
+.title {
+  color: #fff;
+  font-size: 32px;
+  font-weight: 700;
+  margin-bottom: 10px;
+  letter-spacing: -0.5px;
+}
+.subtitle { color: #8a8d9e; font-size: 15px; }
 
+/* =============== GOOGLE BUTTON (HERO) =============== */
+.googleBtn {
+  width: 100%; padding: 15px;
+  background: #ffffff; color: #111;
+  border: none; border-radius: 14px;
+  cursor: pointer; font-weight: 600; font-size: 15px;
+  display: flex; justify-content: center; align-items: center; gap: 12px;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+.googleBtn:hover:not(:disabled) {
+  background: #f8f9fa; transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(255, 255, 255, 0.1);
+}
+.googleBtn:active { transform: translateY(0); }
+
+/* =============== DIVIDER =============== */
+.divider {
+  display: flex; align-items: center; text-align: center; margin: 25px 0;
+}
+.divider::before, .divider::after {
+  content: ''; flex: 1; border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.divider span {
+  padding: 0 15px; color: #5a5b7a; font-size: 11px; font-weight: 700; letter-spacing: 1.5px;
+}
+
+/* =============== INPUT FIELDS =============== */
+.formElement { display: flex; flex-direction: column; width: 100%; }
+.inputGroup { margin-bottom: 18px; width: 100%; }
+.inputWrapper { position: relative; display: flex; align-items: center; }
+.inputIcon {
+  position: absolute; left: 18px; width: 20px; height: 20px;
+  color: #6a6b8c; pointer-events: none; transition: 0.3s ease;
+}
+.authInput {
+  width: 100%; padding: 16px 16px 16px 50px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 14px; color: #fff; font-size: 15px;
+  outline: none; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+}
+.authInput::placeholder { color: #5a5b7a; }
+.authInput:focus {
+  border-color: #8c82f2; background: rgba(0, 0, 0, 0.5);
+  box-shadow: 0 0 0 4px rgba(140, 130, 242, 0.15);
+}
+.authInput:focus + .inputIcon, .inputWrapper:focus-within .inputIcon { color: #8c82f2; }
+
+/* Password Eye Button */
+.eyeBtn {
+  position: absolute; right: 18px;
+  background: none; border: none; color: #6a6b8c;
+  cursor: pointer; padding: 0; transition: 0.3s;
+  display: flex; align-items: center;
+}
+.eyeBtn:hover { color: #8c82f2; }
+.eyeBtn svg { width: 20px; height: 20px; }
+
+/* =============== PASSWORD STRENGTH =============== */
+.strengthWrapper {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: 10px; font-size: 12px; font-weight: 600; padding: 0 5px;
+}
+.strengthBar {
+  flex: 1; height: 4px; background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px; margin-right: 12px; overflow: hidden;
+}
+.strengthFill { height: 100%; border-radius: 10px; transition: all 0.4s ease; }
+
+/* =============== ACTION BUTTONS GROUP =============== */
+.actionButtons {
+  display: flex; flex-direction: column; gap: 14px; margin-top: 10px;
+}
+
+/* Submit Button */
 .authBtnPrimary {
   width: 100%; padding: 16px; border: none;
-  background: #8c82f2; color: #fff; border-radius: 14px;
-  cursor: pointer; font-weight: bold; margin-bottom: 10px;
+  background: linear-gradient(135deg, #8c82f2 0%, #7063f4 100%);
+  color: #fff; border-radius: 14px; cursor: pointer;
+  font-weight: 600; font-size: 16px; letter-spacing: 0.5px;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex; justify-content: center; align-items: center;
+}
+.authBtnPrimary:hover:not(:disabled) {
+  transform: translateY(-2px); box-shadow: 0 8px 25px rgba(140, 130, 242, 0.4);
+}
+.authBtnPrimary:disabled { background: #3a3a4e; color: #777; cursor: not-allowed; }
+
+/* Guest Button (Glass Outline) */
+.authBtnGuest {
+  width: 100%; padding: 15px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #a7a9be; border-radius: 14px; cursor: pointer;
+  font-weight: 600; font-size: 15px;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex; justify-content: center; align-items: center; gap: 10px;
+}
+.authBtnGuest svg { width: 18px; height: 18px; color: #feca57; }
+.authBtnGuest:hover {
+  background: rgba(255, 255, 255, 0.08); color: #fff;
+  border-color: rgba(255, 255, 255, 0.2); transform: translateY(-2px);
 }
 
-.authBtnSecondary {
-  background: transparent; border: 1px solid #8c82f2; color: #8c82f2;
-  padding: 16px; border-radius: 14px; cursor: pointer;
+/* =============== ERRORS & SUCCESS =============== */
+.errorBorder .authInput { border-color: #ff5555; }
+.errorText { color: #ff5555; font-size: 13px; margin-top: 8px; display: block; padding-left: 5px; }
+
+.errorBox {
+  color: #ff5555; font-size: 14px; margin-bottom: 20px;
+  background: rgba(255, 85, 85, 0.08); padding: 14px;
+  border-radius: 12px; border: 1px solid rgba(255, 85, 85, 0.2);
+  text-align: center; font-weight: 500;
+}
+.successBox {
+  color: #4ade80; font-size: 14px; margin-bottom: 20px;
+  background: rgba(74, 222, 128, 0.08); padding: 14px;
+  border-radius: 12px; border: 1px solid rgba(74, 222, 128, 0.2);
+  text-align: center; font-weight: 500;
 }
 
-.authBtnGuest { background: #2a2a40; border: none; color: #fff; padding: 16px; border-radius: 14px; cursor: pointer; }
+/* =============== LINKS & FOOTER =============== */
+.forgotPassword { text-align: right; margin-top: 5px; margin-bottom: 10px; }
+.forgotPassword span {
+  color: #8c82f2; font-size: 13px; cursor: pointer; transition: 0.3s; font-weight: 500;
+}
+.forgotPassword span:hover { text-decoration: underline; color: #a59df6; }
 
-.authBackBtn { background: transparent; border: none; color: #666; margin-top: 15px; cursor: pointer; }
+.footerLinks { margin-top: 30px; text-align: center; color: #6a6b8c; font-size: 14px; }
+.toggleLink { color: #fff; font-weight: 600; cursor: pointer; margin-left: 5px; transition: 0.3s;}
+.toggleLink:hover { color: #8c82f2; text-decoration: underline; }
 
-.authError { color: #ff6b6b; font-size: 13px; margin-bottom: 15px; }
+/* =============== ANIMATIONS =============== */
+.spinner {
+  width: 22px; height: 22px; border: 3px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff; border-radius: 50%; animation: spin 0.8s infinite linear;
+}
+
+@keyframes spin { 100% { transform: rotate(360deg); } }
+@keyframes scaleIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+@keyframes pulse { 0% { transform: scale(1); opacity: 0.15; } 100% { transform: scale(1.1); opacity: 0.25; } }
+
+/* Floating Orbs Animation */
+@keyframes floatOrb {
+  0% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(30px, -50px) scale(1.1); }
+  66% { transform: translate(-20px, 20px) scale(0.9); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+
+/* =============== RESPONSIVE (MOBILE & TABLET) =============== */
+@media (max-width: 900px) {
+  .authContainer { flex-direction: column; width: 92%; min-height: auto; }
+  .authDecoration { display: none; }
+  .formContainer { padding: 45px 30px; }
+  .title { font-size: 28px; }
+  .backToChatBtn { top: 15px; left: 15px; padding: 8px 14px; font-size: 13px; }
+}
+@media (max-width: 480px) {
+  .formContainer { padding: 35px 20px; }
+  .authInput { font-size: 14px; }
+  .actionButtons { gap: 12px; }
+  .bgOrb1, .bgOrb2 { display: none; /* Mobile pe clean rakhne ke liye orbs hide kar diye */ }
+}
