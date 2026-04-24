@@ -2,24 +2,26 @@ import React, { useState, useEffect } from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import Admin from './Admin.jsx'
+import Auth from './Auth.jsx'
+import Profile from './Profile.jsx'
 import './index.css'
 
 function MainRouter() {
-  const [currentHash, setCurrentHash] = useState(window.location.hash);
+  const [currentPath, setCurrentPath] = useState(window.location.pathname);
 
   useEffect(() => {
-    // Ye function check karega ki URL kab change hua
-    const onHashChange = () => setCurrentHash(window.location.hash);
-    window.addEventListener('hashchange', onHashChange);
-    
-    return () => window.removeEventListener('hashchange', onHashChange);
+    const onLocationChange = () => setCurrentPath(window.location.pathname);
+    // Listen for back/forward browser buttons
+    window.addEventListener('popstate', onLocationChange);
+    return () => window.removeEventListener('popstate', onLocationChange);
   }, []);
 
-  // Agar URL mein #admin hai, toh Admin dikhao, warna App dikhao
-  if (currentHash === '#admin') {
-    return <Admin />;
-  }
-  
+  // 🔥 NAYA PROFESSIONAL ROUTING (Bina # ke)
+  if (currentPath === '/admin') return <Admin />;
+  if (currentPath === '/auth') return <Auth />;
+  if (currentPath === '/profile') return <Profile />;
+
+  // Default Chat Page
   return <App />;
 }
 

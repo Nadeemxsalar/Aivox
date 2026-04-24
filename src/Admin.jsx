@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { collection, getDocs, query, orderBy } from 'firebase/firestore';
-import { db } from './firebase';
+import { db, auth } from './firebase'; 
+import { onAuthStateChanged } from 'firebase/auth';
 import styles from './Admin.module.css';
 
 const makeFingerprint = (log) => {
@@ -25,20 +26,40 @@ const getWordFrequency = (logs) => {
 function Admin() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  // 🔥 SECURITY GUARD STATES 🔥
+  const [authLoading, setAuthLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const allowedEmails = ['nadeemxsalar@gmail.com', 'realheronadeem@gmail.com']; 
+
   const [activeTab, setActiveTab] = useState('overview'); 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null); 
   const [isMobileChatView, setIsMobileChatView] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState('');
-  // 🔥 CHATS TAB WALA NAYA SEARCH STATE 🔥
   const [chatSearchQuery, setChatSearchQuery] = useState('');
   
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [countdown, setCountdown] = useState(30);
   const countdownRef = useRef(null);
 
+  // 🔥 CHECKING ADMIN ACCESS ON LOAD 🔥
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user && user.email && allowedEmails.includes(user.email.toLowerCase())) {
+        setIsAdmin(true);
+      } else {
+        setIsAdmin(false);
+      }
+      setAuthLoading(false);
+    });
+    return unsubscribe;
+  }, []);
+
+  // Fetch data modified: Only fetch if user is Admin
   const fetchData = useCallback(async () => {
+    if (!isAdmin) return; // Security Check
     try {
       const q = query(collection(db, "aivox_tracking"), orderBy("timestamp", "desc"));
       const snap = await getDocs(q);
@@ -49,12 +70,14 @@ function Admin() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isAdmin]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { 
+    if (isAdmin) fetchData(); 
+  }, [fetchData, isAdmin]);
 
   useEffect(() => {
-    if (autoRefresh) {
+    if (autoRefresh && isAdmin) {
       setCountdown(30);
       countdownRef.current = setInterval(() => {
         setCountdown(prev => {
@@ -67,7 +90,7 @@ function Admin() {
       setCountdown(30);
     }
     return () => clearInterval(countdownRef.current);
-  }, [autoRefresh, fetchData]);
+  }, [autoRefresh, fetchData, isAdmin]);
 
   const downloadCSV = () => {
     if (logs.length === 0) return alert("No data!");
@@ -110,7 +133,6 @@ function Admin() {
   }, {});
   const userList = Object.values(chatGroups).sort((a,b) => new Date(b.messages[0].timestamp) - new Date(a.messages[0].timestamp));
 
-  // 🔥 FILTER LOGIC FOR CHATS TAB 🔥
   const filteredChatUsers = userList.filter(user => 
     user.userName.toLowerCase().includes(chatSearchQuery.toLowerCase()) || 
     user.device.toLowerCase().includes(chatSearchQuery.toLowerCase())
@@ -216,6 +238,30 @@ function Admin() {
   }, [filteredChatUsers, selectedUser]);
 
   const handleTabChange = (tab) => { setActiveTab(tab); setIsMobileMenuOpen(false); setIsMobileChatView(false); setSearchQuery(''); setChatSearchQuery(''); };
+
+  // 🔥 RENDER GUARDS: CHECKING SECURITY BEFORE SHOWING UI 🔥
+  if (authLoading) return (
+    <div className={styles.adminLoading}>
+      <div className={styles.spinner}></div>
+      <h2>Checking Admin Credentials... 🛡️</h2>
+    </div>
+  );
+
+  if (!isAdmin) return (
+    <div className={styles.adminLoading} style={{background: '#0b0a14', flexDirection: 'column'}}>
+      <div style={{fontSize: '70px', marginBottom: '10px'}}>🚫</div>
+      <h2 style={{color: '#ff4d4f', margin: 0}}>Access Denied</h2>
+      <p style={{color: '#888', maxWidth: '350px', textAlign: 'center', marginTop: '15px', lineHeight: '1.5', fontSize: '14px'}}>
+        Only authorized admins can access the God-Mode Control Center. Please log in with a verified master account.
+      </p>
+      <button 
+        onClick={() => window.location.href = '/auth'}
+        style={{marginTop: '30px', padding: '14px 28px', background: '#8c82f2', border: 'none', borderRadius: '12px', color: '#fff', cursor: 'pointer', fontWeight: 'bold', fontSize: '15px'}}
+      >
+        Go to Login Page 🔑
+      </button>
+    </div>
+  );
 
   if (loading) return (
     <div className={styles.adminLoading}>
@@ -374,7 +420,7 @@ function Admin() {
           </div>
         )}
 
-        {/* ══ CHATS (🔥 NOW WITH SEARCH BOX IN SIDEBAR) ══ */}
+        {/* ══ CHATS ══ */}
         {activeTab === 'chats' && (
           <div className={styles.sectionFadeIn}>
             <header className={`${styles.pageHeader} ${isMobileChatView ? styles.hideOnMobile : ''}`}>
@@ -384,7 +430,6 @@ function Admin() {
               <div className={`${styles.userListSidebar} ${isMobileChatView ? styles.hideOnMobile : ''}`}>
                 <h3 className={styles.paneTitle}>Active Users ({filteredChatUsers.length})</h3>
                 
-                {/* 🔥 NEW INLINE SEARCH BOX FOR CHATS TAB 🔥 */}
                 <div style={{ padding: '10px 15px', borderBottom: '1px solid #1f1e2e', background: '#121120' }}>
                   <input
                     type="text"
@@ -1053,7 +1098,6 @@ function Admin() {
                           <div style={{fontSize:'10px',color:'#444',marginTop:'2px',fontFamily:'monospace'}}>FP: {makeFingerprint(log)}</div>
                         </td>
                         <td>
-                          {/* 🔥 User Name Displayed Here */}
                           <div className={styles.sysTag} style={{background: '#8c82f2', color: '#fff'}}>{log.userName || "Anonymous"}</div>
                           <div className={styles.subText} style={{marginTop: '4px'}}><strong>Device:</strong> {log.device||"Unknown"}<br/><strong>OS:</strong> {log.os}<br/><strong>RAM:</strong> {log.ramMemory||'N/A'} | <strong>CPU:</strong> {log.cpuCores||'N/A'} cores<br/><strong>Screen:</strong> {log.screenResolution}</div>
                         </td>

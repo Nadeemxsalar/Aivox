@@ -1,0 +1,269 @@
+/* =========================================
+   PROFILE MODULE STYLES (Profile.module.css)
+   ========================================= */
+
+.appContainer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  width: 100vw;
+  padding: 20px;
+  position: relative;
+  overflow-x: hidden;
+  background: #0b0a14;
+  color: #fff;
+  box-sizing: border-box;
+}
+
+/* 🔥 Centered Loading Screen 🔥 */
+.loadingContainer {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  width: 100vw;
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 9999;
+  background: #0b0a14;
+  color: #8c82f2;
+}
+
+.spinnerCircle {
+  animation: spin 1s linear infinite;
+  margin-bottom: 15px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* 🔥 Floating Back Button 🔥 */
+.backToChatBtn {
+  position: fixed;
+  top: 25px;
+  left: 25px;
+  background: rgba(20, 20, 35, 0.7);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(140, 130, 242, 0.4);
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.3s ease;
+  z-index: 1000;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
+
+.backToChatBtn:hover {
+  background: rgba(140, 130, 242, 0.2);
+  transform: translateY(-2px);
+  border-color: #8c82f2;
+}
+
+/* 🔥 Layout Grid 🔥 */
+.profileDashboard {
+  display: flex;
+  gap: 40px;
+  margin-top: 40px;
+  max-width: 1000px;
+  width: 100%;
+  z-index: 10;
+}
+
+.profileLeft {
+  background: #151426;
+  border: 1px solid #2a2a40;
+  padding: 40px;
+  border-radius: 24px;
+  text-align: center;
+  flex: 1;
+  height: fit-content;
+}
+
+.profileRight {
+  flex: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* 🔥 Profile Avatar & Badges (Updated Bada Icon) 🔥 */
+.profileAvatarGiant {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #8c82f2, #534ab7);
+  color: #fff;
+  font-size: 52px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 0 auto 20px auto;
+  font-weight: 900;
+  box-shadow: 0 10px 30px rgba(140, 130, 242, 0.4);
+  border: 4px solid #151426;
+  outline: 2px solid #8c82f2;
+  transition: transform 0.3s ease;
+}
+
+.profileAvatarGiant:hover {
+  transform: scale(1.05);
+}
+
+.roleBadge {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: bold;
+  margin-top: 5px;
+}
+
+.badgeFree {
+  background: #2a2a40;
+  color: #888;
+}
+
+.badgePremium {
+  background: linear-gradient(90deg, #f5b942, #ff8c42);
+  color: #fff;
+  box-shadow: 0 4px 10px rgba(245, 185, 66, 0.3);
+}
+
+/* 🔥 Features (Session & XP Bar) 🔥 */
+.sessionTracker {
+  margin-top: 15px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #cdd6f4;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.xpBarContainer {
+  background: #121120;
+  padding: 15px;
+  border-radius: 12px;
+  border: 1px solid #1f1e2e;
+}
+
+.xpBarTrack {
+  height: 8px;
+  background: #1f1e2e;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.xpBarFill {
+  height: 100%;
+  background: linear-gradient(90deg, #8c82f2, #00e5ff);
+  transition: width 0.5s ease;
+}
+
+/* 🔥 Buttons 🔥 */
+.profileActions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 25px;
+}
+
+.btnBack, .btnLogout, .btnUpgrade {
+  padding: 12px 20px;
+  border-radius: 12px;
+  font-weight: bold;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  border: none;
+}
+
+.btnBack {
+  background: #2a2a40;
+  color: #cdd6f4;
+}
+
+.btnBack:hover { background: #3a3a5e; }
+
+.btnLogout {
+  background: transparent;
+  border: 1px solid #ff4d4f;
+  color: #ff4d4f;
+}
+
+.btnLogout:hover { background: rgba(255, 77, 79, 0.1); }
+
+.btnUpgrade {
+  background: linear-gradient(90deg, #8c82f2, #534ab7);
+  color: #fff;
+  width: 100%;
+  margin-top: 10px;
+}
+
+.btnUpgrade:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(140, 130, 242, 0.3);
+}
+
+/* 🔥 Cards & Stats 🔥 */
+.statsGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.statBox {
+  background: #151426;
+  border: 1px solid #2a2a40;
+  padding: 20px;
+  border-radius: 16px;
+  text-align: center;
+}
+
+.statNumber {
+  font-size: 24px;
+  font-weight: bold;
+  margin-top: 10px;
+}
+
+.premiumCardLarge, .normalCardLarge {
+  background: #151426;
+  border: 1px solid #2a2a40;
+  padding: 30px;
+  border-radius: 20px;
+}
+
+.premiumCardLarge {
+  border-color: rgba(245, 185, 66, 0.4);
+  box-shadow: 0 10px 30px rgba(245, 185, 66, 0.1);
+}
+
+.premiumHeaderLarge {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.premiumHeaderLarge h2 { margin: 0; font-size: 22px; }
+.premiumDesc { color: #aaa; font-size: 14px; line-height: 1.6; margin-bottom: 10px; }
+.perksList { list-style: none; padding: 0; margin-top: 15px; text-align: left; }
+.perksList li { margin-bottom: 10px; font-size: 14px; color: #cdd6f4; }
+.freeBadgeTag { font-size: 12px; background: #2a2a40; color: #888; padding: 4px 10px; border-radius: 12px; font-weight: bold; }
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .profileDashboard { flex-direction: column; }
+  .backToChatBtn { top: 15px; left: 15px; padding: 8px 14px; font-size: 13px; }
+}

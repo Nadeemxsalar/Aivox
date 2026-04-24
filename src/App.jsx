@@ -4,13 +4,14 @@ import ReactMarkdown from 'react-markdown';
 import { trackUserActivity, onPromptStart, onPromptKey } from './utils/tracker'; 
 import { getSystemPrompt } from './utils/aiConfig'; 
 import { getRelevantHistory } from './utils/smartMemory';
+import { auth } from './firebase'; 
+import { onAuthStateChanged } from 'firebase/auth';
 import './App.css';
 
 function App() {
-  // 🔥 NAME MODAL STATE 🔥
-  const [userName, setUserName] = useState(localStorage.getItem('aivox_username') || '');
-  const [showNameModal, setShowNameModal] = useState(!localStorage.getItem('aivox_username'));
-  const [tempName, setTempName] = useState('');
+  const [authUser, setAuthUser] = useState(null);
+  const [guestName, setGuestName] = useState(localStorage.getItem('aivox_guest_name') || '');
+  const [isAuthChecking, setIsAuthChecking] = useState(true);
 
   const [prompt, setPrompt] = useState('');
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -38,6 +39,22 @@ function App() {
   const groqApiKey = import.meta.env.VITE_GROQ_API_KEY;
   const openRouterApiKey = import.meta.env.VITE_OPENROUTER_API_KEY;
 
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      if (currentUser) {
+        setAuthUser(currentUser);
+      } else {
+        setAuthUser(null);
+        if (!localStorage.getItem('aivox_guest_name')) {
+          // 🔥 FIX: Redirect to new professional route
+          window.location.href = '/auth';
+        }
+      }
+      setIsAuthChecking(false);
+    });
+    return unsubscribe;
+  }, []);
+
   useEffect(() => { localStorage.setItem('aivox_chat_history', JSON.stringify(messages)); }, [messages]);
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, loading]);
 
@@ -50,16 +67,7 @@ function App() {
   const scrollToBottom = () => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   const showToast = (msg) => { setToastMsg(msg); setTimeout(() => setToastMsg(''), 3000); };
 
-  // 🔥 SAVE NAME FUNCTION
-  const handleNameSubmit = (e) => {
-    e.preventDefault();
-    if(tempName.trim().length > 1) {
-      localStorage.setItem('aivox_username', tempName.trim());
-      setUserName(tempName.trim());
-      setShowNameModal(false);
-      showToast(`Welcome, ${tempName.trim()}! 👋`);
-    }
-  };
+  const currentDisplayName = authUser ? authUser.displayName : (guestName || 'User');
 
   const handleGenerate = async (e, customPrompt = null, isRegenerate = false) => {
     if (e) e.preventDefault();
@@ -121,7 +129,7 @@ function App() {
       if (finalModel !== "Failed" && finalResponse) {
         trackUserActivity({
           prompt: textToProcess, response: finalResponse, model: finalModel, timeTakenMs, isRoasterMode,
-          userName: userName // 🔥 Pushing the user name to backend
+          userName: currentDisplayName
         });
       }
     }
@@ -140,14 +148,12 @@ function App() {
   const handleKeyDown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleGenerate(e); } };
   const handleInputResize = (e) => { e.target.style.height = 'auto'; e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`; setPrompt(e.target.value); };
   const handleCopy = (text) => { navigator.clipboard.writeText(text); showToast("Copied to clipboard! 📋"); };
-  
   const handleSpeak = (text) => {
     if (isSpeaking) { window.speechSynthesis.cancel(); setIsSpeaking(false); return; }
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.onend = () => setIsSpeaking(false);
     setIsSpeaking(true); window.speechSynthesis.speak(utterance);
   };
-
   const handleVoiceInput = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) return showToast("Mic not supported 🎙️");
@@ -166,30 +172,18 @@ function App() {
   };
 
   const handleDownloadChat = () => {
-    const chatText = messages.map(m => `[${m.time}] ${m.role === 'ai' ? 'Aivox' : (userName || 'User')}:\n${m.text}\n\n`).join('');
+    const chatText = messages.map(m => `[${m.time}] ${m.role === 'ai' ? 'Aivox' : currentDisplayName}:\n${m.text}\n\n`).join('');
     const blob = new Blob([chatText], { type: "text/plain" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "Aivox_Chat.txt"; a.click(); showToast("Chat Downloaded 💾");
   };
 
   const filteredMessages = messages.filter(msg => msg.text.toLowerCase().includes(searchQuery.toLowerCase()));
 
+  if (isAuthChecking) return <div className="app-container dark-mode" style={{display:'flex', justifyContent:'center', alignItems:'center', height:'100vh', color:'#8c82f2'}}>Loading...</div>;
+
   return (
     <div className={`app-container ${isDarkMode ? 'dark-mode' : 'light-mode'} ${isRoasterMode ? 'roaster-active-theme' : ''}`}>
       
-      {/* 🔥 NAME ENTRY MODAL 🔥 */}
-      {showNameModal && (
-        <div className="name-modal-overlay">
-          <div className="name-modal-content">
-            <h2>Welcome to Aivox! 🚀</h2>
-            <p>Please enter your name to start chatting with your personalized AI assistant.</p>
-            <form onSubmit={handleNameSubmit}>
-              <input type="text" placeholder="Enter your name..." value={tempName} onChange={(e) => setTempName(e.target.value)} className="name-input" autoFocus required />
-              <button type="submit" disabled={tempName.trim().length < 2} className="name-submit-btn">Start Chatting ✨</button>
-            </form>
-          </div>
-        </div>
-      )}
-
       {toastMsg && <div className="custom-toast">{toastMsg}</div>}
       <div className="chat-wrapper">
         <div className="chat-header">
@@ -203,6 +197,17 @@ function App() {
              <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" strokeWidth="2" fill="none"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
           </button>
           <div className={`header-actions ${isMobileMenuOpen ? 'open' : ''}`}>
+            
+            {/* 🔥 FIX: Directed to new profile page without hash, added preventDefault 🔥 */}
+            <button 
+              onClick={(e) => { e.preventDefault(); window.location.href = '/profile'; }} 
+              className="action-btn" 
+              title="Profile" 
+              style={{color: authUser ? '#f5b942' : '#cdd6f4'}}
+            >
+              <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            </button>
+
             <button onClick={() => { setIsRoasterMode(!isRoasterMode); showToast(isRoasterMode ? "Normal Mode ✨" : "Roaster Mode 🔥"); }} className={`action-btn ${isRoasterMode ? 'roaster-btn-active' : ''}`}>
               <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>
             </button>
@@ -236,7 +241,7 @@ function App() {
                     )}
                   </div>
                 </div>
-                {msg.role === 'user' && <div className="msg-avatar user-avatar">{userName ? userName.charAt(0).toUpperCase() : 'U'}</div>}
+                {msg.role === 'user' && <div className="msg-avatar user-avatar">{currentDisplayName ? currentDisplayName.charAt(0).toUpperCase() : 'U'}</div>}
               </div>
             );
           })}
@@ -257,18 +262,15 @@ function App() {
                 value={prompt} 
                 onChange={handleInputResize} 
                 onFocus={onPromptStart} 
-                onKeyDown={(e) => {
-                  onPromptKey();
-                  handleKeyDown(e);
-                }} 
+                onKeyDown={(e) => { onPromptKey(); handleKeyDown(e); }} 
                 placeholder="Ask anything..." 
-                disabled={loading || showNameModal} 
+                disabled={loading} 
                 rows={1} 
                 className="auto-resize-textarea" 
               />
               <div className="char-counter">{prompt.length} / 500</div>
             </div>
-            <button type="submit" disabled={!prompt.trim() || loading || showNameModal} className="send-btn"><svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
+            <button type="submit" disabled={!prompt.trim() || loading} className="send-btn"><svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
           </form>
         </div>
 

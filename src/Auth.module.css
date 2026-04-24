@@ -1,0 +1,47 @@
+.authWrapper {
+  display: flex; justify-content: center; align-items: center;
+  height: 100vh; width: 100vw;
+  background: radial-gradient(circle at center, #1a1929 0%, #0b0a14 100%);
+}
+
+.backToChatBtn {
+  position: fixed; top: 25px; left: 25px;
+  background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fff; padding: 10px 20px; border-radius: 12px;
+  cursor: pointer; transition: 0.3s;
+}
+
+.nameModalContent {
+  width: 90%; max-width: 400px;
+  background: rgba(21, 20, 38, 0.6); backdrop-filter: blur(20px);
+  padding: 40px; border-radius: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  text-align: center;
+}
+
+.title { color: #fff; font-size: 24px; margin-bottom: 25px; }
+
+.nameInput {
+  width: 100%; padding: 16px; margin-bottom: 15px;
+  background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px; color: #fff; outline: none;
+}
+
+.authBtnGroup { display: flex; flex-direction: column; gap: 12px; }
+
+.authBtnPrimary {
+  width: 100%; padding: 16px; border: none;
+  background: #8c82f2; color: #fff; border-radius: 14px;
+  cursor: pointer; font-weight: bold; margin-bottom: 10px;
+}
+
+.authBtnSecondary {
+  background: transparent; border: 1px solid #8c82f2; color: #8c82f2;
+  padding: 16px; border-radius: 14px; cursor: pointer;
+}
+
+.authBtnGuest { background: #2a2a40; border: none; color: #fff; padding: 16px; border-radius: 14px; cursor: pointer; }
+
+.authBackBtn { background: transparent; border: none; color: #666; margin-top: 15px; cursor: pointer; }
+
+.authError { color: #ff6b6b; font-size: 13px; margin-bottom: 15px; }

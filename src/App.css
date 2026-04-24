@@ -283,14 +283,6 @@ body {
 }
 .scroll-bottom-btn:hover { transform: translateY(-3px); }
 
-/* ─── SUGGESTIONS ─── */
-.suggestions-container { display: flex; flex-wrap: wrap; gap: 10px; padding: 10px 16px; justify-content: center; }
-.suggestion-chip {
-  background: var(--app-bg); border: 1px solid var(--border-color); color: var(--text-main);
-  padding: 8px 14px; border-radius: 20px; font-size: 13px; cursor: pointer; transition: all 0.2s;
-}
-.suggestion-chip:hover { background: var(--border-color); transform: translateY(-2px); }
-
 /* ─── INPUT AREA & MIC FIX ─── */
 .input-container-wrapper {
   background: var(--app-bg); border-top: 1px solid var(--border-color);
@@ -298,16 +290,16 @@ body {
 }
 .input-area { 
   display: flex; 
-  align-items: flex-end; /* Keeps items aligned to the bottom */
+  align-items: flex-end; 
   gap: 10px; 
 }
 
-/* 🎯 MIC FIX: Margin-bottom offsets the character counter space */
+/* 🎯 MIC FIX */
 .mic-btn {
   background: transparent; border: none; color: var(--text-muted); cursor: pointer;
   padding: 8px; border-radius: 50%; transition: background 0.2s, color 0.2s; 
   flex-shrink: 0; 
-  margin-bottom: 18px; /* Pushes mic up to align with text box */
+  margin-bottom: 18px; 
 }
 .mic-btn:hover { background: var(--border-color); color: var(--text-main); }
 
@@ -325,12 +317,12 @@ body {
 
 .char-counter { font-size: 10px; color: var(--text-muted); text-align: right; padding-right: 12px; margin-top: 4px; }
 
-/* 🎯 SEND BTN FIX: Margin-bottom offsets the character counter space */
+/* 🎯 SEND BTN FIX */
 .send-btn {
   width: 44px; height: 44px; border-radius: 50%; background: var(--bubble-user);
   border: none; cursor: pointer; display: flex; align-items: center; justify-content: center;
   transition: background 0.2s, transform 0.1s; flex-shrink: 0; color: white; 
-  margin-bottom: 18px; /* Pushes send up to align with text box */
+  margin-bottom: 18px; 
 }
 .send-btn:active:not(:disabled) { transform: scale(0.94); }
 .send-btn:disabled { background: var(--border-color); color: var(--text-muted); cursor: not-allowed; }
@@ -353,7 +345,7 @@ body {
 .message-bubble.ai p:last-child { margin-bottom: 0; }
 .message-bubble.ai ul { padding-left: 20px; margin-bottom: 8px; }
 
-/* ─── 📱 MOBILE RESPONSIVE (HAMBURGER MENU FIX) ─── */
+/* ─── 📱 MOBILE RESPONSIVE ─── */
 @media (max-width: 680px) {
   .app-container { padding: 0; }
   .chat-wrapper { height: 100vh; max-height: 100vh; border-radius: 0; box-shadow: none; }
@@ -385,7 +377,8 @@ body {
   
   .scroll-bottom-btn { bottom: 120px; right: 20px; }
 }
-/* 🔥 WELCOME NAME MODAL STYLES 🔥 */
+
+/* 🔥 SHARED MODAL STYLES (Used in Auth and Profile) 🔥 */
 .name-modal-overlay {
   position: fixed; top: 0; left: 0; right: 0; bottom: 0;
   background: rgba(11, 10, 20, 0.85); backdrop-filter: blur(8px);
@@ -405,10 +398,3 @@ body {
   box-sizing: border-box; outline: none; transition: border 0.3s;
 }
 .name-input:focus { border-color: #8c82f2; }
-.name-submit-btn {
-  width: 100%; padding: 15px; border-radius: 12px; border: none;
-  background: #8c82f2; color: #fff; font-size: 16px; font-weight: bold;
-  cursor: pointer; transition: background 0.3s, transform 0.2s;
-}
-.name-submit-btn:hover { background: #7b71e3; transform: translateY(-2px); }
-.name-submit-btn:disabled { background: #3a3a5e; cursor: not-allowed; transform: none; }
