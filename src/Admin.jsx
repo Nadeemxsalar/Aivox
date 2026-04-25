@@ -366,7 +366,6 @@ function Admin() {
         </NavSection>
 
         <NavSection label="Access & Users">
-          {/* 🔥 NAYA TAB ADD KIYA 🔥 */}
           <NavBtn tab="usermanagement">👥 User Accounts</NavBtn>
           <NavBtn tab="fingerprint">🔏 Fingerprints</NavBtn>
           <NavBtn tab="depth">💬 Conv. Depth</NavBtn>
@@ -397,11 +396,12 @@ function Admin() {
       </aside>
 
       {/* ⬛ MAIN CONTENT */}
-      <main className={styles.mainContent}>
+      {/* 🔥 INLINE STYLE FIX FOR MAIN CONTENT SCROLL 🔥 */}
+      <main className={styles.mainContent} style={{ overflowY: 'auto', overflowX: 'hidden' }}>
 
         {/* ══ OVERVIEW ══ */}
         {activeTab === 'overview' && (
-          <div className={styles.sectionFadeIn}>
+          <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
             <header className={styles.pageHeader}>
               <div><h1>📊 Dashboard Overview</h1><p>High-level metrics and API usage.</p></div>
               <div className={styles.pageHeaderRight}>
@@ -471,7 +471,7 @@ function Admin() {
 
         {/* ══ USER MANAGEMENT TAB (NAYA SECTION) ══ */}
         {activeTab === 'usermanagement' && (
-          <div className={styles.sectionFadeIn}>
+          <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
             <header className={styles.pageHeader}>
               <div><h1>👥 Registered Users</h1><p>Manage all signed-up accounts, assign roles, and delete users.</p></div>
             </header>
@@ -499,9 +499,10 @@ function Admin() {
               </div>
             </div>
 
-            <div className={styles.tableContainer}>
-              <div className={styles.tableWrapper}>
-                <table className={styles.adminTable}>
+            {/* 🔥 INLINE STYLE FIX FOR TABLE SCROLL 🔥 */}
+            <div className={styles.tableContainer} style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%' }}>
+              <div className={styles.tableWrapper} style={{ minWidth: '100%' }}>
+                <table className={styles.adminTable} style={{ width: '100%', minWidth: '800px' }}>
                   <thead>
                     <tr>
                       <th>User Details</th>
@@ -570,7 +571,7 @@ function Admin() {
 
         {/* ══ CHATS ══ */}
         {activeTab === 'chats' && (
-          <div className={styles.sectionFadeIn}>
+          <div className={styles.sectionFadeIn} style={{ height: '100%', overflow: 'hidden' }}>
             <header className={`${styles.pageHeader} ${isMobileChatView ? styles.hideOnMobile : ''}`}>
               <div><h1>💬 Live User Chats</h1><p>Search by User Name to view their messages.</p></div>
             </header>
@@ -651,7 +652,7 @@ function Admin() {
 
         {/* ══ LIVE SEARCH (Global) ══ */}
         {activeTab === 'search' && (
-          <div className={styles.sectionFadeIn}>
+          <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
             <header className={styles.pageHeader}>
               <div><h1>🔍 Live Search</h1><p>Prompts, responses, devices, names, models — sab kuch ek jagah dhundo.</p></div>
             </header>
@@ -669,9 +670,10 @@ function Admin() {
               )}
               <span className={styles.searchResults}>{searchLogs.length} results</span>
             </div>
-            <div className={styles.tableContainer}>
-              <div className={styles.tableWrapper}>
-                <table className={styles.adminTable}>
+            
+            <div className={styles.tableContainer} style={{ overflowX: 'auto', width: '100%', WebkitOverflowScrolling: 'touch' }}>
+              <div className={styles.tableWrapper} style={{ minWidth: '100%' }}>
+                <table className={styles.adminTable} style={{ width: '100%', minWidth: '800px' }}>
                   <thead>
                     <tr><th>Time</th><th>User / Device</th><th>Prompt</th><th>Response Preview</th><th>Model</th><th>Tokens</th></tr>
                   </thead>
@@ -701,7 +703,7 @@ function Admin() {
 
         {/* ══ HOUR HEATMAP ══ */}
         {activeTab === 'heatmap' && (
-          <div className={styles.sectionFadeIn}>
+          <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
             <header className={styles.pageHeader}>
               <div><h1>🌡️ Hourly Traffic Heatmap</h1><p>Konse ghante mein sabse zyada traffic aata hai — 0 se 23 tak.</p></div>
             </header>
@@ -754,7 +756,7 @@ function Admin() {
 
         {/* ══ FINGERPRINT SCORE ══ */}
         {activeTab === 'fingerprint' && (
-          <div className={styles.sectionFadeIn}>
+          <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
             <header className={styles.pageHeader}>
               <div><h1>🔏 User Fingerprints</h1><p>Har unique device ka stable fingerprint ID + engagement score.</p></div>
               <div className={styles.pageHeaderRight}>
@@ -792,7 +794,7 @@ function Admin() {
 
         {/* ══ WORD CLOUD ══ */}
         {activeTab === 'wordcloud' && (
-          <div className={styles.sectionFadeIn}>
+          <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
             <header className={styles.pageHeader}>
               <div><h1>☁️ Word Cloud</h1><p>Sabse zyada use hone wale words user prompts mein.</p></div>
             </header>
@@ -846,7 +848,7 @@ function Admin() {
 
         {/* ══ RESPONSE QUALITY METER ══ */}
         {activeTab === 'quality' && (
-          <div className={styles.sectionFadeIn}>
+          <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
             <header className={styles.pageHeader}>
               <div><h1>📈 Response Quality Meter</h1><p>Tokens per second — model ki actual speed aur efficiency.</p></div>
             </header>
@@ -873,7 +875,7 @@ function Admin() {
 
         {/* ══ HARDWARE LEADERBOARD ══ */}
         {activeTab === 'hardware' && (
-          <div className={styles.sectionFadeIn}>
+          <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
             <header className={styles.pageHeader}>
               <div><h1>🖥️ Hardware Leaderboard</h1><p>Sabse powerful devices jo Aivox use kar rahe hain — CPU × RAM score.</p></div>
             </header>
@@ -904,7 +906,7 @@ function Admin() {
 
         {/* ══ ERROR MONITOR ══ */}
         {activeTab === 'errors' && (
-          <div className={styles.sectionFadeIn}>
+          <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
             <header className={styles.pageHeader}>
               <div><h1>⚠️ Error & Fail Monitor</h1><p>Failed requests, slow responses, aur model fallback tracking.</p></div>
             </header>
@@ -955,7 +957,7 @@ function Admin() {
 
         {/* ══ CONVERSATION DEPTH ══ */}
         {activeTab === 'depth' && (
-          <div className={styles.sectionFadeIn}>
+          <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
             <header className={styles.pageHeader}>
               <div><h1>💬 Conversation Depth</h1><p>Har user ne kitne messages bheje — engagement ka asli measure.</p></div>
             </header>
@@ -1009,7 +1011,7 @@ function Admin() {
 
         {/* ══ ANALYTICS REPORT ══ */}
         {activeTab === 'report' && (
-          <div className={styles.sectionFadeIn}>
+          <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
             <div className={styles.reportHeader}>
               <div>
                 <p className={styles.reportTitle}>📋 Aivox Analytics Report</p>
@@ -1059,7 +1061,7 @@ function Admin() {
 
         {/* ══ DEVICES ══ */}
         {activeTab === 'devices' && (
-          <div className={styles.sectionFadeIn}>
+          <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
             <header className={styles.pageHeader}><div><h1>📱 Device Demographics</h1><p>OS aur browser breakdown.</p></div></header>
             <div className={styles.analyticsGrid}>
               <div className={styles.analyticsCard}>
@@ -1086,7 +1088,7 @@ function Admin() {
 
         {/* ══ PERFORMANCE ══ */}
         {activeTab === 'performance' && (
-          <div className={styles.sectionFadeIn}>
+          <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
             <header className={styles.pageHeader}><div><h1>⚡ AI Model Performance</h1><p>Speed, tokens, fallback analysis.</p></div></header>
             <div className={styles.analyticsGrid}>
               {Object.entries(modelStats).map(([model,data]) => (
@@ -1104,7 +1106,7 @@ function Admin() {
 
         {/* ══ GEO ══ */}
         {activeTab === 'geography' && (
-          <div className={styles.sectionFadeIn}>
+          <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
             <header className={styles.pageHeader}><div><h1>🌍 Geography & Localization</h1><p>Timezones aur languages.</p></div></header>
             <div className={styles.analyticsGrid}>
               <div className={styles.analyticsCard}>
@@ -1131,7 +1133,7 @@ function Admin() {
 
         {/* ══ ROASTER ══ */}
         {activeTab === 'roaster' && (
-          <div className={styles.sectionFadeIn}>
+          <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
             <header className={styles.pageHeader}><div><h1>🔥 Roaster vs Normal</h1><p>Mode usage deep dive.</p></div></header>
             <div className={styles.analyticsGrid}>
               <div className={styles.analyticsCard}>
@@ -1154,7 +1156,7 @@ function Admin() {
 
         {/* ══ NETWORK ══ */}
         {activeTab === 'network' && (
-          <div className={styles.sectionFadeIn}>
+          <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
             <header className={styles.pageHeader}><div><h1>📡 Network & Environment</h1><p>Connection types aur browser settings.</p></div></header>
             <div className={styles.analyticsGrid}>
               <div className={styles.analyticsCard}>
@@ -1178,7 +1180,7 @@ function Admin() {
 
         {/* ══ TOKEN ECONOMICS ══ */}
         {activeTab === 'economics' && (
-          <div className={styles.sectionFadeIn}>
+          <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
             <header className={styles.pageHeader}><div><h1>💰 Token Economics</h1><p>API spend analysis.</p></div></header>
             <div className={styles.analyticsGrid}>
               <div className={styles.analyticsCard}>
@@ -1201,11 +1203,11 @@ function Admin() {
 
         {/* ══ PROMPT INTEL ══ */}
         {activeTab === 'prompts' && (
-          <div className={styles.sectionFadeIn}>
+          <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
             <header className={styles.pageHeader}><div><h1>🧠 Prompt Intelligence</h1><p>Longest aur most complex queries.</p></div></header>
-            <div className={styles.tableContainer}>
-              <div className={styles.tableWrapper}>
-                <table className={styles.adminTable}>
+            <div className={styles.tableContainer} style={{ overflowX: 'auto', width: '100%', WebkitOverflowScrolling: 'touch' }}>
+              <div className={styles.tableWrapper} style={{ minWidth: '100%' }}>
+                <table className={styles.adminTable} style={{ width: '100%', minWidth: '800px' }}>
                   <thead><tr><th>Length</th><th>User Prompt</th><th>Tokens</th><th>Model</th></tr></thead>
                   <tbody>
                     {longestPrompts.map(log => (
@@ -1225,7 +1227,7 @@ function Admin() {
 
         {/* ══ SYSTEM LOGS ══ */}
         {activeTab === 'system' && (
-          <div className={styles.sectionFadeIn}>
+          <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
             <header className={styles.pageHeader}>
               <div><h1>⚙️ System Logs</h1><p>Deep hardware, network, environment data.</p></div>
               <div className={styles.pageHeaderRight}>
@@ -1233,9 +1235,9 @@ function Admin() {
                 <button onClick={downloadCSV} className={`${styles.actionBtn} ${styles.actionBtnSuccess}`}>📥 CSV</button>
               </div>
             </header>
-            <div className={styles.tableContainer}>
-              <div className={styles.tableWrapper}>
-                <table className={styles.adminTable}>
+            <div className={styles.tableContainer} style={{ overflowX: 'auto', width: '100%', WebkitOverflowScrolling: 'touch' }}>
+              <div className={styles.tableWrapper} style={{ minWidth: '100%' }}>
+                <table className={styles.adminTable} style={{ width: '100%', minWidth: '800px' }}>
                   <thead><tr><th>Time & Zone</th><th>User & HW</th><th>Network</th><th>Performance</th></tr></thead>
                   <tbody>
                     {logs.map(log => (

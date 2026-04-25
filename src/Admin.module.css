@@ -1,12 +1,14 @@
 /* ─── MAIN LAYOUT ─── */
 .adminLayout {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  width: 100vw;
   /* Updated Background for a deeper, richer SaaS feel */
   background: radial-gradient(circle at top right, #151426 0%, #0b0a14 100%);
   color: #e6e6fa;
   font-family: 'Inter', system-ui, sans-serif;
-  overflow-x: hidden; 
+  overflow: hidden; /* Locks outer scroll, forces inner areas to scroll */
+  box-sizing: border-box;
 }
 
 /* ─── LOADING STATE ─── */
@@ -34,9 +36,9 @@
 /* ─── SIDEBAR ─── */
 .sidebar {
   width: 260px; background: #121120; border-right: 1px solid #1f1e2e;
-  display: flex; flex-direction: column; position: fixed; height: 100vh;
+  display: flex; flex-direction: column; height: 100vh;
   z-index: 100; transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  overflow-y: auto;
+  overflow-y: auto; flex-shrink: 0;
   box-shadow: 5px 0 25px rgba(0,0,0,0.2);
 }
 .sidebar::-webkit-scrollbar { width: 4px; }
@@ -87,13 +89,12 @@
 /* ─── MAIN CONTENT ─── */
 .mainContent {
   flex: 1; 
-  margin-left: 260px; 
-  padding: 40px; 
-  width: calc(100% - 260px); 
-  max-width: 1400px; 
   height: 100vh; 
   overflow-y: auto;
+  overflow-x: hidden;
+  padding: 40px; 
   box-sizing: border-box; 
+  min-width: 0; /* Crucial for preventing horizontal stretch */
 }
 
 /* FADE IN ANIMATION */
@@ -134,7 +135,7 @@
 .statCard {
   background: rgba(21, 20, 38, 0.6); padding: 24px; border-radius: 18px; border: 1px solid rgba(255,255,255,0.05); 
   transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); box-shadow: 0 8px 25px rgba(0,0,0,0.2); position: relative; overflow: hidden;
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px); display: flex; flex-direction: column; justify-content: center;
 }
 .statCard::before {
   content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
@@ -175,23 +176,35 @@
 
 /* ─── CHAT SPLIT UI ─── */
 .chatSplitView {
-  display: flex; gap: 24px; flex: 1; min-height: 0;
-  height: calc(100vh - 190px);
+  display: flex; gap: 24px; 
+  height: 70vh; 
+  min-height: 500px;
+  max-height: 800px;
+  margin-bottom: 40px;
+  width: 100%;
 }
 .userListSidebar {
   width: 320px; background: rgba(21, 20, 38, 0.6); border-radius: 18px; border: 1px solid rgba(255,255,255,0.05);
   display: flex; flex-direction: column; flex-shrink: 0; overflow: hidden; backdrop-filter: blur(10px);
+  height: 100%;
 }
 .paneTitle {
   padding: 18px 20px; margin: 0; font-size: 12px; color: #8a8d9e; text-transform: uppercase;
   letter-spacing: 1px; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.2); font-weight: 700;
+  flex-shrink: 0;
 }
-.userListScroll { flex: 1; overflow-y: auto; }
+.userListScroll { 
+  flex: 1; 
+  overflow-y: auto; 
+  overflow-x: hidden;
+  height: 100%;
+}
 .userListScroll::-webkit-scrollbar { width: 6px; }
 .userListScroll::-webkit-scrollbar-thumb { background: #2a2a40; border-radius: 10px; }
 .userListItem {
   display: flex; align-items: center; gap: 14px; padding: 16px 18px;
   border-bottom: 1px solid rgba(255,255,255,0.03); cursor: pointer; transition: all 0.2s;
+  flex-shrink: 0; 
 }
 .userListItem:hover { background: rgba(255,255,255,0.04); padding-left: 22px; }
 .activeUserItem { background: rgba(140, 130, 242, 0.1) !important; border-left: 4px solid #8c82f2; }
@@ -199,43 +212,45 @@
   width: 44px; height: 44px; background: rgba(0,0,0,0.3); border-radius: 50%; border: 1px solid rgba(255,255,255,0.05);
   display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; box-shadow: inset 0 2px 4px rgba(255,255,255,0.05);
 }
-.userInfo h4 { margin: 0 0 4px 0; font-size: 14px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
+.userInfo { min-width: 0; flex: 1; }
+.userInfo h4 { margin: 0 0 4px 0; font-size: 14px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .userInfo p { margin: 0; font-size: 12px; color: #00e5ff; }
 
 .chatWindow {
   flex: 1; background: rgba(21, 20, 38, 0.6); border-radius: 18px; border: 1px solid rgba(255,255,255,0.05);
   display: flex; flex-direction: column; overflow: hidden; position: relative; backdrop-filter: blur(10px);
+  min-width: 0; height: 100%;
 }
-.chatWindowHeader { padding: 18px 20px; background: rgba(0,0,0,0.2); border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; gap: 12px; }
+.chatWindowHeader { padding: 18px 20px; background: rgba(0,0,0,0.2); border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
 .chatWindowHeader h3 { margin: 0; font-size: 16px; color: #fff; }
 .mobileBackBtn { display: none; }
 .chatMessagesArea { 
-  flex: 1; padding: 24px; overflow-y: auto; display: flex; flex-direction: column; gap: 24px; 
+  flex: 1; padding: 24px; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; gap: 24px; 
+  height: 100%;
 }
 .chatMessagesArea::-webkit-scrollbar { width: 6px; }
 .chatMessagesArea::-webkit-scrollbar-thumb { background: #2a2a40; border-radius: 10px; }
 .noUserSelected { display: flex; height: 100%; align-items: center; justify-content: center; color: #5a5b7a; font-style: italic; font-size: 18px; }
-.chatPair { display: flex; flex-direction: column; gap: 12px; }
+.chatPair { display: flex; flex-direction: column; gap: 12px; flex-shrink: 0; }
 .bubbleRow { display: flex; width: 100%; }
 .rowUser { justify-content: flex-end; }
 .rowAi { justify-content: flex-start; gap: 12px; }
-.chatBubble { max-width: 75%; padding: 14px 18px; font-size: 14px; line-height: 1.6; position: relative; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+.chatBubble { max-width: 75%; padding: 14px 18px; font-size: 14px; line-height: 1.6; position: relative; box-shadow: 0 4px 15px rgba(0,0,0,0.1); flex-shrink: 0; }
 .bubbleUser { background: #2a2a40; color: #fff; border-radius: 18px 18px 0 18px; border: 1px solid rgba(255,255,255,0.05); }
 .bubbleAi { background: rgba(140, 130, 242, 0.1); color: #e6e6fa; border-radius: 18px 18px 18px 0; border: 1px solid rgba(140, 130, 242, 0.2); }
 .bubbleRoast { background: rgba(255, 77, 79, 0.15); border-color: rgba(255, 77, 79, 0.3); color: #ffe6e6; }
-.aiSmallAvatar { width: 30px; height: 30px; border-radius: 50%; margin-top: auto; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+.aiSmallAvatar { width: 30px; height: 30px; border-radius: 50%; margin-top: auto; box-shadow: 0 2px 8px rgba(0,0,0,0.3); flex-shrink: 0; }
 .chatAvatarWrapper { display: flex; align-items: flex-end; }
 .bubbleTime { display: block; font-size: 10px; color: #8a8d9e; text-align: right; margin-top: 8px; }
 .bubbleFooter { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 8px; }
 .bubbleModel { font-size: 10px; font-weight: 800; color: #8c82f2; text-transform: uppercase; }
 
 /* ─── ENHANCED DYNAMIC TABLES ─── */
-.tableContainer { background: rgba(21, 20, 38, 0.6); border-radius: 18px; border: 1px solid rgba(255,255,255,0.05); width: 100%; backdrop-filter: blur(10px); overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+.tableContainer { background: rgba(21, 20, 38, 0.6); border-radius: 18px; border: 1px solid rgba(255,255,255,0.05); width: 100%; max-width: 100%; backdrop-filter: blur(10px); overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
 .tableWrapper { overflow-x: auto; width: 100%; -webkit-overflow-scrolling: touch; }
 .adminTable { width: 100%; border-collapse: collapse; text-align: left; min-width: 800px; }
 .adminTable th, .adminTable td { padding: 16px 20px; border-bottom: 1px solid rgba(255,255,255,0.05); vertical-align: middle; }
 .adminTable th { background: rgba(0,0,0,0.3); color: #8a8d9e; font-size: 12px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; }
-/* Table Row 3D Hover Effect */
 .adminTable tr { transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); position: relative; }
 .adminTable tbody tr:hover { 
   background: rgba(255, 255, 255, 0.03); 
@@ -245,7 +260,6 @@
   border-radius: 12px;
 }
 .timeCol { color: #fff; font-size: 13px; font-weight: 600; white-space: nowrap; }
-/* Glowing System Tags */
 .sysTag { 
   display: inline-block; background: #2a2a40; color: #cdd6f4; padding: 4px 10px; 
   border-radius: 8px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
@@ -287,10 +301,7 @@
 
 /* ─── HEATMAP ─── */
 .heatmapGrid {
-  display: grid;
-  grid-template-columns: repeat(24, 1fr);
-  gap: 4px;
-  margin-top: 10px;
+  display: grid; grid-template-columns: repeat(24, 1fr); gap: 4px; margin-top: 10px;
 }
 .heatmapCell {
   height: 40px; border-radius: 8px; position: relative; cursor: pointer;
@@ -300,8 +311,7 @@
 .heatmapCell:hover { transform: scale(1.2); z-index: 10; box-shadow: 0 5px 15px rgba(0,0,0,0.4); border-color: rgba(255,255,255,0.2); }
 .heatmapLabel { font-size: 11px; font-weight: 800; color: rgba(255,255,255,0.9); }
 .heatmapXAxis {
-  display: grid; grid-template-columns: repeat(24, 1fr);
-  gap: 4px; margin-top: 6px;
+  display: grid; grid-template-columns: repeat(24, 1fr); gap: 4px; margin-top: 6px;
 }
 .heatmapXLabel { font-size: 10px; color: #6a6b8c; text-align: center; font-weight: 600;}
 .heatmapTooltip {
@@ -324,9 +334,7 @@
 .wordTag:hover { transform: scale(1.15) translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,0.3); z-index: 2; opacity: 1 !important;}
 
 /* ─── FINGERPRINT SCORE ─── */
-.fingerprintGrid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px;
-}
+.fingerprintGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
 .fingerprintCard {
   background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.05); border-radius: 16px; padding: 20px;
   display: flex; flex-direction: column; gap: 12px; transition: 0.3s;
@@ -334,14 +342,9 @@
 .fingerprintCard:hover { border-color: rgba(255,255,255,0.15); transform: translateY(-3px); box-shadow: 0 10px 25px rgba(0,0,0,0.3);}
 .fingerprintHeader { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
 .fingerprintId { font-size: 12px; color: #8c82f2; font-family: monospace; word-break: break-all; font-weight: 600;}
-.fingerprintScore {
-  font-size: 26px; font-weight: 900; min-width: 44px; text-align: right;
-  line-height: 1; text-shadow: 0 2px 10px rgba(0,0,0,0.5);
-}
+.fingerprintScore { font-size: 26px; font-weight: 900; min-width: 44px; text-align: right; line-height: 1; text-shadow: 0 2px 10px rgba(0,0,0,0.5); }
 .fingerprintMeta { font-size: 12px; color: #8a8d9e; line-height: 1.7; }
-.scoreHigh { color: #00ff80; }
-.scoreMid { color: #f5b942; }
-.scoreLow { color: #ff4d4f; }
+.scoreHigh { color: #00ff80; } .scoreMid { color: #f5b942; } .scoreLow { color: #ff4d4f; }
 
 /* ─── HARDWARE LEADERBOARD ─── */
 .leaderboardList { display: flex; flex-direction: column; gap: 12px; }
@@ -367,9 +370,7 @@
 .leaderboardStatLabel { font-size: 11px; color: #6a6b8c; font-weight: 600; text-transform: uppercase;}
 
 /* ─── ERROR MONITOR ─── */
-.errorMonitor {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 18px;
-}
+.errorMonitor { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 18px; }
 .errorCard {
   background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.05); border-radius: 16px; padding: 24px;
   text-align: center; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
@@ -384,8 +385,7 @@
 
 /* ─── CONVERSATION DEPTH ─── */
 .depthChart {
-  display: flex; align-items: flex-end; gap: 10px;
-  height: 140px; padding: 0 6px; margin-top: 12px;
+  display: flex; align-items: flex-end; gap: 10px; height: 140px; padding: 0 6px; margin-top: 12px;
 }
 .depthBar {
   flex: 1; border-radius: 8px 8px 0 0; position: relative;
@@ -393,8 +393,7 @@
 }
 .depthBar:hover { opacity: 1 !important; transform: scaleY(1.05); transform-origin: bottom; }
 .depthBarVal {
-  position: absolute; top: -22px; left: 0; right: 0;
-  text-align: center; font-size: 11px; color: #fff; font-weight: 800;
+  position: absolute; top: -22px; left: 0; right: 0; text-align: center; font-size: 11px; color: #fff; font-weight: 800;
 }
 
 /* ─── PRINT / REPORT STYLES ─── */
@@ -405,9 +404,7 @@
 }
 .reportTitle { font-size: 26px; font-weight: 900; color: #fff; margin: 0 0 8px 0; letter-spacing: -0.5px;}
 .reportMeta { font-size: 13px; color: #8a8d9e; font-weight: 500;}
-.reportGrid {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 28px;
-}
+.reportGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 28px; }
 .reportCard {
   background: rgba(21, 20, 38, 0.6); border: 1px solid rgba(255,255,255,0.05); border-radius: 16px; padding: 22px; text-align: center; box-shadow: 0 8px 20px rgba(0,0,0,0.2);
 }
@@ -426,20 +423,16 @@
 }
 .printBtn:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(140, 130, 242, 0.5); }
 
-/* ─── MOBILE RESPONSIVE ─── */
+/* ─── MOBILE RESPONSIVE (Fixed Heights for Smooth Scrolling) ─── */
 .menuOverlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 90; backdrop-filter: blur(5px); }
-
-@media (max-width: 1024px) {
-  .chatSplitView { flex-direction: column; height: auto; }
-  .userListSidebar { width: 100%; height: 250px; } 
-  .chatWindow { height: 600px; display: flex; flex-direction: column; } 
-  .reportGrid { grid-template-columns: repeat(2, 1fr); }
-}
 
 @media (max-width: 900px) {
   .mobileHeader { display: flex; }
-  .mainContent { margin-left: 0; width: 100%; padding: 90px 18px 30px 18px; height: 100vh; overflow-y: auto; }
-  .sidebar { transform: translateX(-100%); }
+  .mainContent { 
+    margin-left: 0; width: 100%; padding: 90px 15px 40px 15px; 
+    height: 100vh; overflow-y: auto; overflow-x: hidden; box-sizing: border-box;
+  }
+  .sidebar { transform: translateX(-100%); position: fixed; }
   .sidebarOpen { transform: translateX(0); }
   .closeMenuBtn { display: block; }
   .menuOverlay { display: block; }
@@ -449,11 +442,20 @@
     display: flex; align-items: center; background: rgba(255,255,255,0.05); border: none;
     color: #fff; margin-right: 14px; padding: 8px 12px; cursor: pointer; border-radius: 8px; font-size: 12px;
   }
-  .userListSidebar { width: 100%; height: 75vh; }
-  .chatWindow { width: 100%; height: 75vh; }
-  .chatMessagesArea { overflow-y: auto !important; height: 100%; }
+  
+  /* Mobile Chat View Fixes */
+  /* Remove max-height restriction so it can grow fully */
+  .chatSplitView { flex-direction: column; height: auto; display: flex; max-height: none; }
+  
+  /* Dynamic height for user list so it fills the screen properly */
+  .userListSidebar { width: 100%; height: calc(100vh - 220px); min-height: 400px; flex-shrink: 0; } 
+  
+  /* FULL SCREEN CHAT (WhatsApp Style) */
+  .chatWindow { width: 100%; height: calc(100vh - 140px); flex-shrink: 0; }
+  
   .heatmapGrid { grid-template-columns: repeat(12, 1fr); }
   .heatmapXAxis { grid-template-columns: repeat(12, 1fr); }
+  .reportGrid { grid-template-columns: repeat(2, 1fr); }
 }
 
 @media (max-width: 600px) {
@@ -469,7 +471,7 @@
 @media print {
   .sidebar, .mobileHeader { display: none !important; }
   .mainContent { margin-left: 0 !important; width: 100% !important; padding: 20px !important; }
-  .adminLayout { background: #fff; color: #000; }
+  .adminLayout { background: #fff; color: #000; height: auto; overflow: visible; }
   .statCard, .analyticsCard, .reportCard, .reportSection { border: 1px solid #ccc; box-shadow: none; color: #000; background: #fff; }
   .title, .statValue, h3, h4, .perfStat strong, .reportTitle, .reportRowVal { color: #000 !important; }
   .perfStat, .reportRow { border-bottom-color: #eee; }
