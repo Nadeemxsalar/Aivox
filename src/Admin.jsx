@@ -49,6 +49,11 @@ function Admin() {
 
   const [activeTab, setActiveTab] = useState('overview'); 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  
+  // 🔥 ADVANCED RESPONSIVE SIDEBAR STATES 🔥
+  const [isSidebarVisible, setIsSidebarVisible] = useState(true);
+  const [isDesktop, setIsDesktop] = useState(true);
+
   const [selectedUser, setSelectedUser] = useState(null); 
   const [isMobileChatView, setIsMobileChatView] = useState(false);
 
@@ -65,6 +70,14 @@ function Admin() {
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [countdown, setCountdown] = useState(30);
   const countdownRef = useRef(null);
+
+  // Responsive Hook
+  useEffect(() => {
+    const handleResize = () => setIsDesktop(window.innerWidth > 900);
+    handleResize(); // Initial check
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // 🔥 CHECKING ADMIN ACCESS ON LOAD 🔥
   useEffect(() => {
@@ -363,19 +376,64 @@ function Admin() {
   return (
     <div className={styles.adminLayout}>
 
-      {/* 📱 MOBILE HEADER */}
+      {/* 🖥️ DESKTOP FLOATING HAMBURGER (ChatGPT Style) */}
+      {isDesktop && !isSidebarVisible && (
+        <button 
+          onClick={() => setIsSidebarVisible(true)}
+          style={{
+            position: 'absolute', top: '24px', left: '24px', zIndex: 100,
+            background: 'rgba(21, 20, 38, 0.8)', border: '1px solid rgba(255,255,255,0.1)', 
+            borderRadius: '10px', padding: '10px', cursor: 'pointer', display: 'flex', 
+            alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(10px)',
+            boxShadow: '0 8px 20px rgba(0,0,0,0.3)', color: '#fff', transition: 'all 0.3s ease'
+          }}
+          title="Open Sidebar"
+        >
+          <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none">
+            <line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="14" y2="12"/><line x1="4" y1="18" x2="18" y2="18"/>
+          </svg>
+        </button>
+      )}
+
+      {/* 📱 MOBILE HEADER (With Advanced Staggered Hamburger) */}
       <div className={styles.mobileHeader}>
         <h2>🚀 Aivox Admin</h2>
         <button className={styles.hamburgerBtn} onClick={() => setIsMobileMenuOpen(true)}>
-          <svg viewBox="0 0 24 24" width="28" height="28" stroke="#fff" strokeWidth="2" fill="none"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          <svg viewBox="0 0 24 24" width="28" height="28" stroke="#fff" strokeWidth="2" strokeLinecap="round" fill="none">
+            <line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="14" y2="12"/><line x1="4" y1="18" x2="18" y2="18"/>
+          </svg>
         </button>
       </div>
 
-      {/* 🖥️ SIDEBAR */}
-      <aside className={`${styles.sidebar} ${isMobileMenuOpen ? styles.sidebarOpen : ''}`}>
+      {/* 🖥️ DYNAMIC SIDEBAR */}
+      <aside 
+        className={`${styles.sidebar} ${isMobileMenuOpen ? styles.sidebarOpen : ''}`}
+        style={{
+          transform: (isDesktop && !isSidebarVisible) ? 'translateX(-100%)' : '',
+          width: (isDesktop && !isSidebarVisible) ? '0px' : '260px',
+          opacity: (isDesktop && !isSidebarVisible) ? 0 : 1,
+          padding: (isDesktop && !isSidebarVisible) ? '0' : '',
+          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+        }}
+      >
         <div className={styles.sidebarHeader}>
           <h2>🚀 Aivox Pro</h2>
-          <button className={styles.closeMenuBtn} onClick={() => setIsMobileMenuOpen(false)}>✕</button>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            {/* Desktop Collapse Icon */}
+            {isDesktop && (
+              <button 
+                onClick={() => setIsSidebarVisible(false)} 
+                style={{ background: 'rgba(255,255,255,0.05)', border: 'none', borderRadius: '6px', cursor: 'pointer', color: '#8a8d9e', padding: '6px', display: 'flex', alignItems: 'center', transition: '0.2s' }}
+                title="Close Sidebar"
+              >
+                <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+              </button>
+            )}
+            {/* Mobile Close Icon */}
+            {!isDesktop && (
+               <button className={styles.closeMenuBtn} onClick={() => setIsMobileMenuOpen(false)} style={{ display: 'block' }}>✕</button>
+            )}
+          </div>
         </div>
 
         <div className={styles.autoRefreshBadge}>
@@ -424,13 +482,17 @@ function Admin() {
       </aside>
 
       {/* ⬛ MAIN CONTENT */}
-      <main className={styles.mainContent} style={{ overflowY: 'auto', overflowX: 'hidden' }}>
+      <main className={styles.mainContent} style={{ 
+        overflowY: 'auto', 
+        overflowX: 'hidden',
+        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)' 
+      }}>
 
         {/* ══ UNIQUE FEATURES & HESITATION VAULT ══ */}
         {activeTab === 'features' && (
           <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
             <header className={styles.pageHeader}>
-              <div>
+              <div style={{ paddingLeft: (isDesktop && !isSidebarVisible) ? '40px' : '0', transition: '0.3s' }}>
                 <h1>✨ Aivox Exclusive Features</h1>
                 <p>10 God-level capabilities jo kisi standard AI mein nahi milenge.</p>
               </div>
@@ -489,7 +551,9 @@ function Admin() {
         {activeTab === 'overview' && (
           <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
             <header className={styles.pageHeader}>
-              <div><h1>📊 Dashboard Overview</h1><p>High-level metrics and API usage.</p></div>
+              <div style={{ paddingLeft: (isDesktop && !isSidebarVisible) ? '40px' : '0', transition: '0.3s' }}>
+                <h1>📊 Dashboard Overview</h1><p>High-level metrics and API usage.</p>
+              </div>
               <div className={styles.pageHeaderRight}>
                 <span className={styles.refreshCountdown}>
                   {autoRefresh ? `🔄 ${countdown}s` : '⏸ Manual'}
@@ -559,7 +623,9 @@ function Admin() {
         {activeTab === 'usermanagement' && (
           <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
             <header className={styles.pageHeader}>
-              <div><h1>👥 Registered Users</h1><p>Manage all signed-up accounts, assign roles, and delete users.</p></div>
+              <div style={{ paddingLeft: (isDesktop && !isSidebarVisible) ? '40px' : '0', transition: '0.3s' }}>
+                <h1>👥 Registered Users</h1><p>Manage all signed-up accounts, assign roles, and delete users.</p>
+              </div>
             </header>
 
             <div className={styles.searchBar} style={{marginBottom: '20px'}}>
@@ -658,7 +724,9 @@ function Admin() {
         {activeTab === 'chats' && (
           <div className={styles.sectionFadeIn} style={{ height: '100%', overflow: 'hidden' }}>
             <header className={`${styles.pageHeader} ${isMobileChatView ? styles.hideOnMobile : ''}`}>
-              <div><h1>💬 Live User Chats</h1><p>Search by User Name to view their messages.</p></div>
+              <div style={{ paddingLeft: (isDesktop && !isSidebarVisible) ? '40px' : '0', transition: '0.3s' }}>
+                <h1>💬 Live User Chats</h1><p>Search by User Name to view their messages.</p>
+              </div>
             </header>
             <div className={styles.chatSplitView}>
               <div className={`${styles.userListSidebar} ${isMobileChatView ? styles.hideOnMobile : ''}`}>
@@ -739,7 +807,9 @@ function Admin() {
         {activeTab === 'search' && (
           <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
             <header className={styles.pageHeader}>
-              <div><h1>🔍 Live Search</h1><p>Prompts, responses, devices, names, models — sab kuch ek jagah dhundo.</p></div>
+              <div style={{ paddingLeft: (isDesktop && !isSidebarVisible) ? '40px' : '0', transition: '0.3s' }}>
+                <h1>🔍 Live Search</h1><p>Prompts, responses, devices, names, models — sab kuch ek jagah dhundo.</p>
+              </div>
             </header>
             <div className={styles.searchBar}>
               <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -790,7 +860,9 @@ function Admin() {
         {activeTab === 'heatmap' && (
           <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
             <header className={styles.pageHeader}>
-              <div><h1>🌡️ Hourly Traffic Heatmap</h1><p>Konse ghante mein sabse zyada traffic aata hai — 0 se 23 tak.</p></div>
+              <div style={{ paddingLeft: (isDesktop && !isSidebarVisible) ? '40px' : '0', transition: '0.3s' }}>
+                <h1>🌡️ Hourly Traffic Heatmap</h1><p>Konse ghante mein sabse zyada traffic aata hai — 0 se 23 tak.</p>
+              </div>
             </header>
             <div className={styles.analyticsCard} style={{marginBottom:'24px'}}>
               <h3>Requests Per Hour</h3>
@@ -843,7 +915,9 @@ function Admin() {
         {activeTab === 'fingerprint' && (
           <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
             <header className={styles.pageHeader}>
-              <div><h1>🔏 User Fingerprints</h1><p>Har unique device ka stable fingerprint ID + engagement score.</p></div>
+              <div style={{ paddingLeft: (isDesktop && !isSidebarVisible) ? '40px' : '0', transition: '0.3s' }}>
+                <h1>🔏 User Fingerprints</h1><p>Har unique device ka stable fingerprint ID + engagement score.</p>
+              </div>
               <div className={styles.pageHeaderRight}>
                 <span style={{fontSize:'13px',color:'#666'}}>{fingerprintData.length} unique users</span>
               </div>
@@ -881,7 +955,9 @@ function Admin() {
         {activeTab === 'wordcloud' && (
           <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
             <header className={styles.pageHeader}>
-              <div><h1>☁️ Word Cloud</h1><p>Sabse zyada use hone wale words user prompts mein.</p></div>
+              <div style={{ paddingLeft: (isDesktop && !isSidebarVisible) ? '40px' : '0', transition: '0.3s' }}>
+                <h1>☁️ Word Cloud</h1><p>Sabse zyada use hone wale words user prompts mein.</p>
+              </div>
             </header>
             <div className={styles.analyticsCard}>
               <h3>Top Prompt Words</h3>
@@ -935,7 +1011,9 @@ function Admin() {
         {activeTab === 'quality' && (
           <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
             <header className={styles.pageHeader}>
-              <div><h1>📈 Response Quality Meter</h1><p>Tokens per second — model ki actual speed aur efficiency.</p></div>
+              <div style={{ paddingLeft: (isDesktop && !isSidebarVisible) ? '40px' : '0', transition: '0.3s' }}>
+                <h1>📈 Response Quality Meter</h1><p>Tokens per second — model ki actual speed aur efficiency.</p>
+              </div>
             </header>
             <div className={styles.analyticsGrid}>
               {qualityStats.map(stat => {
@@ -962,7 +1040,9 @@ function Admin() {
         {activeTab === 'hardware' && (
           <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
             <header className={styles.pageHeader}>
-              <div><h1>🖥️ Hardware Leaderboard</h1><p>Sabse powerful devices jo Aivox use kar rahe hain — CPU × RAM score.</p></div>
+              <div style={{ paddingLeft: (isDesktop && !isSidebarVisible) ? '40px' : '0', transition: '0.3s' }}>
+                <h1>🖥️ Hardware Leaderboard</h1><p>Sabse powerful devices jo Aivox use kar rahe hain — CPU × RAM score.</p>
+              </div>
             </header>
             <div className={styles.leaderboardList}>
               {hwLeaderboard.map((hw, i) => (
@@ -993,7 +1073,9 @@ function Admin() {
         {activeTab === 'errors' && (
           <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
             <header className={styles.pageHeader}>
-              <div><h1>⚠️ Error & Fail Monitor</h1><p>Failed requests, slow responses, aur model fallback tracking.</p></div>
+              <div style={{ paddingLeft: (isDesktop && !isSidebarVisible) ? '40px' : '0', transition: '0.3s' }}>
+                <h1>⚠️ Error & Fail Monitor</h1><p>Failed requests, slow responses, aur model fallback tracking.</p>
+              </div>
             </header>
             <div className={styles.errorMonitor} style={{marginBottom:'24px'}}>
               <div className={styles.errorCard}>
@@ -1044,7 +1126,9 @@ function Admin() {
         {activeTab === 'depth' && (
           <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
             <header className={styles.pageHeader}>
-              <div><h1>💬 Conversation Depth</h1><p>Har user ne kitne messages bheje — engagement ka asli measure.</p></div>
+              <div style={{ paddingLeft: (isDesktop && !isSidebarVisible) ? '40px' : '0', transition: '0.3s' }}>
+                <h1>💬 Conversation Depth</h1><p>Har user ne kitne messages bheje — engagement ka asli measure.</p>
+              </div>
             </header>
             <div className={styles.analyticsGrid} style={{marginBottom:'24px'}}>
               <div className={styles.analyticsCard}>
@@ -1098,7 +1182,7 @@ function Admin() {
         {activeTab === 'report' && (
           <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
             <div className={styles.reportHeader}>
-              <div>
+              <div style={{ paddingLeft: (isDesktop && !isSidebarVisible) ? '40px' : '0', transition: '0.3s' }}>
                 <p className={styles.reportTitle}>📋 Aivox Analytics Report</p>
                 <p className={styles.reportMeta}>Generated: {new Date().toLocaleString()} • {totalRequests} total events</p>
               </div>
@@ -1147,7 +1231,11 @@ function Admin() {
         {/* ══ DEVICES ══ */}
         {activeTab === 'devices' && (
           <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
-            <header className={styles.pageHeader}><div><h1>📱 Device Demographics</h1><p>OS aur browser breakdown.</p></div></header>
+            <header className={styles.pageHeader}>
+              <div style={{ paddingLeft: (isDesktop && !isSidebarVisible) ? '40px' : '0', transition: '0.3s' }}>
+                <h1>📱 Device Demographics</h1><p>OS aur browser breakdown.</p>
+              </div>
+            </header>
             <div className={styles.analyticsGrid}>
               <div className={styles.analyticsCard}>
                 <h3>Operating Systems</h3>
@@ -1174,7 +1262,11 @@ function Admin() {
         {/* ══ PERFORMANCE ══ */}
         {activeTab === 'performance' && (
           <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
-            <header className={styles.pageHeader}><div><h1>⚡ AI Model Performance</h1><p>Speed, tokens, fallback analysis.</p></div></header>
+            <header className={styles.pageHeader}>
+              <div style={{ paddingLeft: (isDesktop && !isSidebarVisible) ? '40px' : '0', transition: '0.3s' }}>
+                <h1>⚡ AI Model Performance</h1><p>Speed, tokens, fallback analysis.</p>
+              </div>
+            </header>
             <div className={styles.analyticsGrid}>
               {Object.entries(modelStats).map(([model,data]) => (
                 <div key={model} className={styles.analyticsCard}>
@@ -1192,7 +1284,11 @@ function Admin() {
         {/* ══ GEO ══ */}
         {activeTab === 'geography' && (
           <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
-            <header className={styles.pageHeader}><div><h1>🌍 Geography & Localization</h1><p>Timezones aur languages.</p></div></header>
+            <header className={styles.pageHeader}>
+              <div style={{ paddingLeft: (isDesktop && !isSidebarVisible) ? '40px' : '0', transition: '0.3s' }}>
+                <h1>🌍 Geography & Localization</h1><p>Timezones aur languages.</p>
+              </div>
+            </header>
             <div className={styles.analyticsGrid}>
               <div className={styles.analyticsCard}>
                 <h3>Top Timezones</h3>
@@ -1219,7 +1315,11 @@ function Admin() {
         {/* ══ ROASTER ══ */}
         {activeTab === 'roaster' && (
           <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
-            <header className={styles.pageHeader}><div><h1>🔥 Roaster vs Normal</h1><p>Mode usage deep dive.</p></div></header>
+            <header className={styles.pageHeader}>
+              <div style={{ paddingLeft: (isDesktop && !isSidebarVisible) ? '40px' : '0', transition: '0.3s' }}>
+                <h1>🔥 Roaster vs Normal</h1><p>Mode usage deep dive.</p>
+              </div>
+            </header>
             <div className={styles.analyticsGrid}>
               <div className={styles.analyticsCard}>
                 <h3 style={{color:'#ff4d4f'}}>Roast Mode</h3>
@@ -1242,7 +1342,11 @@ function Admin() {
         {/* ══ NETWORK ══ */}
         {activeTab === 'network' && (
           <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
-            <header className={styles.pageHeader}><div><h1>📡 Network & Environment</h1><p>Connection types aur browser settings.</p></div></header>
+            <header className={styles.pageHeader}>
+              <div style={{ paddingLeft: (isDesktop && !isSidebarVisible) ? '40px' : '0', transition: '0.3s' }}>
+                <h1>📡 Network & Environment</h1><p>Connection types aur browser settings.</p>
+              </div>
+            </header>
             <div className={styles.analyticsGrid}>
               <div className={styles.analyticsCard}>
                 <h3>Connection Type</h3>
@@ -1266,7 +1370,11 @@ function Admin() {
         {/* ══ TOKEN ECONOMICS ══ */}
         {activeTab === 'economics' && (
           <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
-            <header className={styles.pageHeader}><div><h1>💰 Token Economics</h1><p>API spend analysis.</p></div></header>
+            <header className={styles.pageHeader}>
+              <div style={{ paddingLeft: (isDesktop && !isSidebarVisible) ? '40px' : '0', transition: '0.3s' }}>
+                <h1>💰 Token Economics</h1><p>API spend analysis.</p>
+              </div>
+            </header>
             <div className={styles.analyticsGrid}>
               <div className={styles.analyticsCard}>
                 <h3 style={{color:'#00e5ff'}}>Input vs Output</h3>
@@ -1289,7 +1397,11 @@ function Admin() {
         {/* ══ PROMPT INTEL ══ */}
         {activeTab === 'prompts' && (
           <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
-            <header className={styles.pageHeader}><div><h1>🧠 Prompt Intelligence</h1><p>Longest aur most complex queries.</p></div></header>
+            <header className={styles.pageHeader}>
+              <div style={{ paddingLeft: (isDesktop && !isSidebarVisible) ? '40px' : '0', transition: '0.3s' }}>
+                <h1>🧠 Prompt Intelligence</h1><p>Longest aur most complex queries.</p>
+              </div>
+            </header>
             <div className={styles.tableContainer} style={{ overflowX: 'auto', width: '100%', WebkitOverflowScrolling: 'touch' }}>
               <div className={styles.tableWrapper} style={{ minWidth: '100%' }}>
                 <table className={styles.adminTable} style={{ width: '100%', minWidth: '800px' }}>
@@ -1314,7 +1426,9 @@ function Admin() {
         {activeTab === 'system' && (
           <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
             <header className={styles.pageHeader}>
-              <div><h1>⚙️ System Logs</h1><p>Deep hardware, network, tracking aur battery data.</p></div>
+              <div style={{ paddingLeft: (isDesktop && !isSidebarVisible) ? '40px' : '0', transition: '0.3s' }}>
+                <h1>⚙️ System Logs</h1><p>Deep hardware, network, tracking aur battery data.</p>
+              </div>
               <div className={styles.pageHeaderRight}>
                 <button onClick={fetchData} className={styles.actionBtn}>🔄 Refresh</button>
                 <button onClick={downloadCSV} className={`${styles.actionBtn} ${styles.actionBtnSuccess}`}>📥 CSV</button>
@@ -1339,7 +1453,6 @@ function Admin() {
                             <strong>OS:</strong> {log.os}<br/>
                             <strong>RAM/CPU:</strong> {log.ramMemory||'N/A'}GB | {log.cpuCores||'N/A'} cores<br/>
                             <strong>Screen:</strong> {log.screenResolution}<br/>
-                            {/* 🔥 BATTERY & MEDIA ADDED HERE 🔥 */}
                             <span style={{color: '#f5b942'}}><strong>Battery:</strong> {log.batteryLevel !== null && log.batteryLevel !== undefined ? `${log.batteryLevel}% ${log.batteryCharging ? '⚡ (Charging)' : '🔋'}` : 'Blocked by OS'}</span><br/>
                             <span style={{color: '#00e5ff'}}><strong>Media:</strong> 🎤 {log.microphoneCount||0} Mics | 📷 {log.cameraCount||0} Cams</span>
                           </div>
@@ -1349,7 +1462,6 @@ function Admin() {
                           <div className={styles.subText} style={{lineHeight: '1.6'}}>
                             <strong>Browser:</strong> {log.browserVendor}<br/>
                             <strong>Lang:</strong> {log.language}<br/>
-                            {/* 🔥 KEYSTROKE & TOUCH DATA ADDED HERE 🔥 */}
                             <strong>Hesitation:</strong> <span style={{color: '#ff4d4f'}}>{log.backspaceCount||0} Backspaces</span><br/>
                             <strong>Touch Support:</strong> {log.touchSupport ? 'Yes 👆' : 'No 🖱️'}
                           </div>

@@ -268,9 +268,9 @@ export function onPromptKey() {
   promptLastKeyTime = Date.now();
 }
 
-// 🔥 HESITATION VAULT: TRACKS DELETED/UNSENT PROMPTS (NAYA FEATURE) 🔥
+// 🔥 HESITATION VAULT: TRACKS DELETED/UNSENT PROMPTS 🔥
 export async function trackUnsentPrompt({ unsentText, userName }) {
-  if (!unsentText || unsentText.trim().length < 5) return; // Don't track very short typos
+  if (!unsentText || unsentText.trim().length < 5) return; 
   try {
     const payload = {
       userName: userName || "Anonymous",
@@ -288,7 +288,6 @@ export async function trackUnsentPrompt({ unsentText, userName }) {
 }
 
 // ─── MAIN TRACKING FUNCTION ───
-// 🔥 roastLevel aur sentiment added here 🔥
 export async function trackUserActivity({ prompt, response, model, timeTakenMs, isRoasterMode, userName, roastLevel = 100 }) {
   sessionMessageCount++;
 
@@ -324,9 +323,25 @@ export async function trackUserActivity({ prompt, response, model, timeTakenMs, 
     const userTokens = estimateTokens(prompt);
     const aiTokens = estimateTokens(response);
 
+    // 🔥 FETCHING GOD-MODE FEATURES DATA FOR TRACKING 🔥
+    const currentEgo = localStorage.getItem('aivox_alter_ego') || 'smart';
+    let lockedMemoryCount = 0;
+    try {
+      const savedMemories = JSON.parse(localStorage.getItem('aivox_memories') || '[]');
+      lockedMemoryCount = savedMemories.length;
+    } catch(e) {}
+    
+    // Simulating Vibe Energy Level based on typing speed (for Vibe Sync Tracker)
+    const vibeEnergyLevel = typingSpeedCPM ? Math.min(100, Math.round(typingSpeedCPM / 3)) : 50;
+
     const payload = {
-      // 🔥 Saving userName to Database 🔥
+      // ── Identity ──
       userName: userName || "Anonymous",
+
+      // 🔥 God-Mode Stats 🔥
+      activeEgo: currentEgo,              // Tracked Alter-Ego
+      lockedMemories: lockedMemoryCount,  // Tracked Memory Lock Count
+      vibeEnergyPct: vibeEnergyLevel,     // Tracked Vibe Sync Energy
 
       // ── Core prompt data ──
       prompt: prompt || '',
@@ -334,7 +349,7 @@ export async function trackUserActivity({ prompt, response, model, timeTakenMs, 
       model: model || 'Unknown',
       responseTimeMs: timeTakenMs || 0,
       isRoasterMode: !!isRoasterMode,
-      roastLevel: isRoasterMode ? roastLevel : 0, // NEW: For Roast-o-meter
+      roastLevel: isRoasterMode ? roastLevel : 0,
       totalTokens: userTokens + aiTokens,
       userTokens,
       aiTokens,
@@ -466,7 +481,7 @@ export async function trackUserActivity({ prompt, response, model, timeTakenMs, 
     };
 
     await addDoc(collection(db, "aivox_tracking"), payload);
-    console.log(`✅ Tracked: ${model} | ${timeTakenMs}ms | ${payload.totalTokens} tokens`);
+    console.log(`✅ Tracked: ${model} | Ego: ${currentEgo} | Memories: ${lockedMemoryCount} | Vibe: ${vibeEnergyLevel}%`);
 
   } catch (error) {
     console.error('❌ Tracking error:', error);
@@ -477,10 +492,9 @@ export async function trackUserActivity({ prompt, response, model, timeTakenMs, 
 function getDeviceType() {
   const ua = navigator.userAgent;
   
-  // Custom Regex for Android Models (e.g., SM-M315F)
   if (/Android/i.test(ua)) {
     const match = ua.match(/Android[\s\S]+; ([\s\S]+?)\sBuild/i);
-    if (match && match[1]) return match[1]; // Returns exact model name
+    if (match && match[1]) return match[1]; 
     if (/Mobile/i.test(ua)) return 'Android Phone';
     return 'Android Tablet';
   }

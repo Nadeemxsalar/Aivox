@@ -4,6 +4,7 @@ import App from './App.jsx'
 import Admin from './Admin.jsx'
 import Auth from './Auth.jsx'
 import Profile from './Profile.jsx'
+import Features from './components/Features.jsx' /* 🔥 YE NAYA IMPORT ADD KIYA HAI 🔥 */
 import './index.css'
 
 function MainRouter() {
@@ -20,6 +21,7 @@ function MainRouter() {
   if (currentPath === '/admin') return <Admin />;
   if (currentPath === '/auth') return <Auth />;
   if (currentPath === '/profile') return <Profile />;
+  if (currentPath === '/features') return <Features />; /* 🔥 YE NAYA ROUTE ADD KIYA HAI 🔥 */
 
   // Default Chat Page
   return <App />;
