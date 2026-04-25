@@ -24,6 +24,20 @@ const getWordFrequency = (logs) => {
   return Object.entries(freq).sort((a,b) => b[1]-a[1]).slice(0, 40);
 };
 
+// 🔥 UNIQUE FEATURES DATA 🔥
+const aivoxFeatures = [
+  { id: 1, icon: '🧠', title: 'God-Mode Memory Matrix', desc: 'Visual map of user details, nicknames, and context. AI never forgets.', color: '#8c82f2', badge: 'Active' },
+  { id: 2, icon: '🎛️', title: 'Roast-O-Meter Engine', desc: 'Live dial to control the brutality level of the Savage Mentor mode.', color: '#ff4d4f', badge: 'Beta' },
+  { id: 3, icon: '🕵️', title: 'Hesitation Vault', desc: 'Tracks unsent prompts. What did the user type and backspace?', color: '#c542f5', badge: 'LIVE NOW' },
+  { id: 4, icon: '📖', title: 'Desi Slang Trainer', desc: 'Real-time injection of local street words to keep the AI culturally sharp.', color: '#00ff80', badge: 'Next' },
+  { id: 5, icon: '👯', title: 'Digital Twin Predictor', desc: 'Analyzes behavior patterns to predict the users exact next question.', color: '#ff8c42', badge: 'AI Core' },
+  { id: 6, icon: '🎭', title: 'Vibe-Sync Technology', desc: 'Automatically matches the users typing speed, tempo, and emotional energy.', color: '#00e5ff', badge: 'Active' },
+  { id: 7, icon: '🛑', title: 'Hallucination Catch-Net', desc: 'Quarantine zone that intercepts and blocks fake information before sending.', color: '#f5b942', badge: 'Security' },
+  { id: 8, icon: '🕸️', title: 'Personality Drift Radar', desc: 'Live chart showing how the AIs persona shifts between empathetic and brutal.', color: '#42f5b3', badge: 'Live' },
+  { id: 9, icon: '🌡️', title: 'Emotional Spectrum', desc: 'Real-time mental state graph of the user based on prompt sentiment.', color: '#ff6b9d', badge: 'Beta' },
+  { id: 10, icon: '💥', title: 'Amnesia Protocol', desc: 'One-click absolute deletion of a users digital footprint and memories.', color: '#e6e6fa', badge: 'Danger' }
+];
+
 function Admin() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -41,9 +55,12 @@ function Admin() {
   const [searchQuery, setSearchQuery] = useState('');
   const [chatSearchQuery, setChatSearchQuery] = useState('');
   
-  // 🔥 USER MANAGEMENT STATES (NAYA) 🔥
+  // 🔥 USER MANAGEMENT STATES 🔥
   const [registeredUsers, setRegisteredUsers] = useState([]);
   const [userSearchQuery, setUserSearchQuery] = useState('');
+
+  // 🔥 UNSENT PROMPTS (HESITATION VAULT) STATE 🔥
+  const [unsentPrompts, setUnsentPrompts] = useState([]);
   
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [countdown, setCountdown] = useState(30);
@@ -72,13 +89,23 @@ function Admin() {
       const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setLogs(data);
 
-      // 2. 🔥 Fetch Registered Users (NAYA) 🔥
+      // 2. Fetch Registered Users
       try {
         const uSnap = await getDocs(collection(db, "users"));
         const uData = uSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setRegisteredUsers(uData);
       } catch (err) {
-        console.warn("Users collection reading error (might be empty or missing permissions):", err);
+        console.warn("Users collection reading error:", err);
+      }
+
+      // 3. 🔥 Fetch Unsent Prompts (Hesitation Vault) 🔥
+      try {
+        const unsentQ = query(collection(db, "aivox_unsent_prompts"), orderBy("timestamp", "desc"));
+        const unsentSnap = await getDocs(unsentQ);
+        const unsentData = unsentSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setUnsentPrompts(unsentData);
+      } catch (err) {
+        console.warn("Unsent prompts fetch error (collection might be empty):", err);
       }
 
     } catch (error) {
@@ -133,7 +160,7 @@ function Admin() {
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
   };
 
-  // 🔥 USER MANAGEMENT ACTIONS (NAYA) 🔥
+  // 🔥 USER MANAGEMENT ACTIONS 🔥
   const handleDeleteUser = async (userId, userName) => {
     if(window.confirm(`Are you sure you want to permanently delete user: ${userName}?`)) {
       try {
@@ -363,6 +390,7 @@ function Admin() {
           <NavBtn tab="overview">📊 Overview</NavBtn>
           <NavBtn tab="chats">💬 User Chats</NavBtn>
           <NavBtn tab="search">🔍 Live Search</NavBtn>
+          <NavBtn tab="features">✨ Unique Features</NavBtn>
         </NavSection>
 
         <NavSection label="Access & Users">
@@ -396,8 +424,66 @@ function Admin() {
       </aside>
 
       {/* ⬛ MAIN CONTENT */}
-      {/* 🔥 INLINE STYLE FIX FOR MAIN CONTENT SCROLL 🔥 */}
       <main className={styles.mainContent} style={{ overflowY: 'auto', overflowX: 'hidden' }}>
+
+        {/* ══ UNIQUE FEATURES & HESITATION VAULT ══ */}
+        {activeTab === 'features' && (
+          <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
+            <header className={styles.pageHeader}>
+              <div>
+                <h1>✨ Aivox Exclusive Features</h1>
+                <p>10 God-level capabilities jo kisi standard AI mein nahi milenge.</p>
+              </div>
+            </header>
+            
+            <div className={styles.featuresGrid}>
+              {aivoxFeatures.map(feat => (
+                <div key={feat.id} className={styles.featureCard} style={{'--feat-color': feat.color}}>
+                  <div className={styles.featureIconBox}>{feat.icon}</div>
+                  <h3 className={styles.featureTitle}>{feat.title}</h3>
+                  <p className={styles.featureDesc}>{feat.desc}</p>
+                  <div className={styles.featureBadge} style={{background: feat.color}}>{feat.badge}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* 🔥 LIVE VAULT DATA TABLE 🔥 */}
+            <div style={{ marginTop: '50px' }}>
+              <h2 style={{ color: '#c542f5', marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                🕵️ Live Hesitation Vault <span className={styles.sysTag} style={{background: '#ff4d4f', color: '#fff', fontSize: '10px'}}>STRICTLY CONFIDENTIAL</span>
+              </h2>
+              <p style={{ color: '#8a8d9e', fontSize: '14px', marginBottom: '20px' }}>
+                Real-time tracking of what users typed but deleted before sending.
+              </p>
+              <div className={styles.tableContainer} style={{ overflowX: 'auto', width: '100%', WebkitOverflowScrolling: 'touch' }}>
+                <div className={styles.tableWrapper} style={{ minWidth: '100%' }}>
+                  <table className={styles.adminTable} style={{ width: '100%', minWidth: '800px' }}>
+                    <thead>
+                      <tr><th>Time</th><th>User / Device</th><th>Deleted Thought (Unsent Prompt)</th></tr>
+                    </thead>
+                    <tbody>
+                      {unsentPrompts.length > 0 ? unsentPrompts.map(log => (
+                        <tr key={log.id}>
+                          <td className={styles.timeCol} style={{fontSize:'11px'}}>{new Date(log.timestamp).toLocaleString()}</td>
+                          <td>
+                            <div className={styles.sysTag} style={{background:'#c542f5', color:'#fff'}}>{log.userName || 'Anonymous'}</div>
+                            <div className={styles.subText}>{log.device||'?'} • {log.os}</div>
+                          </td>
+                          <td style={{maxWidth:'400px',fontSize:'14px',color:'#ff4d4f',fontStyle:'italic', fontWeight: '500'}}>
+                            <del>"{log.unsentText}"</del>
+                          </td>
+                        </tr>
+                      )) : (
+                        <tr><td colSpan={3} style={{textAlign:'center',color:'#555',padding:'40px'}}>Abhi tak kisi ne text type karke delete nahi kiya 🕵️‍♂️</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        )}
 
         {/* ══ OVERVIEW ══ */}
         {activeTab === 'overview' && (
@@ -469,7 +555,7 @@ function Admin() {
           </div>
         )}
 
-        {/* ══ USER MANAGEMENT TAB (NAYA SECTION) ══ */}
+        {/* ══ USER MANAGEMENT TAB ══ */}
         {activeTab === 'usermanagement' && (
           <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
             <header className={styles.pageHeader}>
@@ -499,7 +585,6 @@ function Admin() {
               </div>
             </div>
 
-            {/* 🔥 INLINE STYLE FIX FOR TABLE SCROLL 🔥 */}
             <div className={styles.tableContainer} style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%' }}>
               <div className={styles.tableWrapper} style={{ minWidth: '100%' }}>
                 <table className={styles.adminTable} style={{ width: '100%', minWidth: '800px' }}>
@@ -1229,7 +1314,7 @@ function Admin() {
         {activeTab === 'system' && (
           <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
             <header className={styles.pageHeader}>
-              <div><h1>⚙️ System Logs</h1><p>Deep hardware, network, environment data.</p></div>
+              <div><h1>⚙️ System Logs</h1><p>Deep hardware, network, tracking aur battery data.</p></div>
               <div className={styles.pageHeaderRight}>
                 <button onClick={fetchData} className={styles.actionBtn}>🔄 Refresh</button>
                 <button onClick={downloadCSV} className={`${styles.actionBtn} ${styles.actionBtnSuccess}`}>📥 CSV</button>
@@ -1238,7 +1323,7 @@ function Admin() {
             <div className={styles.tableContainer} style={{ overflowX: 'auto', width: '100%', WebkitOverflowScrolling: 'touch' }}>
               <div className={styles.tableWrapper} style={{ minWidth: '100%' }}>
                 <table className={styles.adminTable} style={{ width: '100%', minWidth: '800px' }}>
-                  <thead><tr><th>Time & Zone</th><th>User & HW</th><th>Network</th><th>Performance</th></tr></thead>
+                  <thead><tr><th>Time & Zone</th><th>User & Hardware (Deep)</th><th>Network & Activity</th><th>Performance</th></tr></thead>
                   <tbody>
                     {logs.map(log => (
                       <tr key={log.id}>
@@ -1249,11 +1334,25 @@ function Admin() {
                         </td>
                         <td>
                           <div className={styles.sysTag} style={{background: '#8c82f2', color: '#fff'}}>{log.userName || "Anonymous"}</div>
-                          <div className={styles.subText} style={{marginTop: '4px'}}><strong>Device:</strong> {log.device||"Unknown"}<br/><strong>OS:</strong> {log.os}<br/><strong>RAM:</strong> {log.ramMemory||'N/A'} | <strong>CPU:</strong> {log.cpuCores||'N/A'} cores<br/><strong>Screen:</strong> {log.screenResolution}</div>
+                          <div className={styles.subText} style={{marginTop: '4px', lineHeight: '1.6'}}>
+                            <strong>Device:</strong> {log.device||"Unknown"}<br/>
+                            <strong>OS:</strong> {log.os}<br/>
+                            <strong>RAM/CPU:</strong> {log.ramMemory||'N/A'}GB | {log.cpuCores||'N/A'} cores<br/>
+                            <strong>Screen:</strong> {log.screenResolution}<br/>
+                            {/* 🔥 BATTERY & MEDIA ADDED HERE 🔥 */}
+                            <span style={{color: '#f5b942'}}><strong>Battery:</strong> {log.batteryLevel !== null && log.batteryLevel !== undefined ? `${log.batteryLevel}% ${log.batteryCharging ? '⚡ (Charging)' : '🔋'}` : 'Blocked by OS'}</span><br/>
+                            <span style={{color: '#00e5ff'}}><strong>Media:</strong> 🎤 {log.microphoneCount||0} Mics | 📷 {log.cameraCount||0} Cams</span>
+                          </div>
                         </td>
                         <td>
                           <div className={styles.sysTag} style={{background:'#1a3a2a',color:'#00ff80'}}>📶 {(log.network||'WIFI').toUpperCase()}</div>
-                          <div className={styles.subText}><strong>Browser:</strong> {log.browserVendor}<br/><strong>Lang:</strong> {log.language}<br/><strong>Mode:</strong> {log.displayMode}</div>
+                          <div className={styles.subText} style={{lineHeight: '1.6'}}>
+                            <strong>Browser:</strong> {log.browserVendor}<br/>
+                            <strong>Lang:</strong> {log.language}<br/>
+                            {/* 🔥 KEYSTROKE & TOUCH DATA ADDED HERE 🔥 */}
+                            <strong>Hesitation:</strong> <span style={{color: '#ff4d4f'}}>{log.backspaceCount||0} Backspaces</span><br/>
+                            <strong>Touch Support:</strong> {log.touchSupport ? 'Yes 👆' : 'No 🖱️'}
+                          </div>
                         </td>
                         <td>
                           <div className={styles.tokenTotal}>Tokens: {log.totalTokens||0}</div>

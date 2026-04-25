@@ -1,5 +1,5 @@
 // ============================================================
-//  tracker.js  —  Aivox Ultra Tracking System v3.0
+//  tracker.js  —  Aivox Ultra Tracking System v4.0 (God-Mode Enabled)
 //  Har chhoti se chhoti chiz track hoti hai yahan
 // ============================================================
 
@@ -268,9 +268,28 @@ export function onPromptKey() {
   promptLastKeyTime = Date.now();
 }
 
+// 🔥 HESITATION VAULT: TRACKS DELETED/UNSENT PROMPTS (NAYA FEATURE) 🔥
+export async function trackUnsentPrompt({ unsentText, userName }) {
+  if (!unsentText || unsentText.trim().length < 5) return; // Don't track very short typos
+  try {
+    const payload = {
+      userName: userName || "Anonymous",
+      unsentText: unsentText,
+      timestamp: new Date().toISOString(),
+      serverTimestamp: serverTimestamp(),
+      device: getDeviceType(),
+      os: getOS(),
+    };
+    await addDoc(collection(db, "aivox_unsent_prompts"), payload);
+    console.log(`🕵️ Vault Captured: User hesitated and deleted prompt.`);
+  } catch (error) {
+    console.error('❌ Vault error:', error);
+  }
+}
+
 // ─── MAIN TRACKING FUNCTION ───
-// 🔥 userName parameter added here 🔥
-export async function trackUserActivity({ prompt, response, model, timeTakenMs, isRoasterMode, userName }) {
+// 🔥 roastLevel aur sentiment added here 🔥
+export async function trackUserActivity({ prompt, response, model, timeTakenMs, isRoasterMode, userName, roastLevel = 100 }) {
   sessionMessageCount++;
 
   try {
@@ -315,6 +334,7 @@ export async function trackUserActivity({ prompt, response, model, timeTakenMs, 
       model: model || 'Unknown',
       responseTimeMs: timeTakenMs || 0,
       isRoasterMode: !!isRoasterMode,
+      roastLevel: isRoasterMode ? roastLevel : 0, // NEW: For Roast-o-meter
       totalTokens: userTokens + aiTokens,
       userTokens,
       aiTokens,
