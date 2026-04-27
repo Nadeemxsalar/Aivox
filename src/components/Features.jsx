@@ -34,17 +34,25 @@ function Features() {
   ];
 
   const egoDetails = {
-    smart: { name: "Smart Bestie", color: "#8c82f2", bg: "rgba(140, 130, 242, 0.15)", icon: "✨" },
+    smart: { name: "Normal Mode", color: "#8c82f2", bg: "rgba(140, 130, 242, 0.15)", icon: "✨" },
     savage: { name: "Savage Roaster", color: "#ff4d4f", bg: "rgba(255, 77, 79, 0.15)", icon: "🔥" },
     corporate: { name: "Strict Boss", color: "#f5b942", bg: "rgba(245, 185, 66, 0.15)", icon: "👔" },
     genz: { name: "Gen-Z Mode", color: "#00e5ff", bg: "rgba(0, 229, 255, 0.15)", icon: "💀" }
   };
 
-  // 🔥 Save Alter-Ego whenever it changes
+  // 🔥 ADVANCED TOGGLE LOGIC 🔥
   const handleEgoSelect = (ego) => {
-    setActiveEgo(ego);
-    localStorage.setItem('aivox_alter_ego', ego);
-    showToast(`${egoDetails[ego].name} Activated! 🔥`);
+    // Agar same mode par dobara click kiya (aur wo 'smart' nahi hai), toh wapas Normal kar do
+    if (activeEgo === ego && ego !== 'smart') {
+      setActiveEgo('smart');
+      localStorage.setItem('aivox_alter_ego', 'smart');
+      showToast('Normal Mode Restored! ✨');
+    } else {
+      // Warna naya mode set kar do
+      setActiveEgo(ego);
+      localStorage.setItem('aivox_alter_ego', ego);
+      showToast(`${egoDetails[ego].name} Activated! 🔥`);
+    }
   };
 
   // 🔥 Save Memories whenever added or deleted
@@ -133,7 +141,7 @@ function Features() {
               <div className={styles.fadeSlideIn}>
                 <div className={styles.contentHeader}>
                   <h2><span style={{marginRight:'10px'}}>🎭</span> Alter-Ego Mode</h2>
-                  <p>Select an ego to instantly change Aivox's behavior across all chats.</p>
+                  <p>Click to activate. Click the active mode again to revert to Normal.</p>
                 </div>
 
                 {/* DYNAMIC ACTIVE STATUS BANNER */}
@@ -150,8 +158,8 @@ function Features() {
                 <div className={styles.egoGrid}>
                   <div className={`${styles.egoCard} ${activeEgo === 'smart' ? styles.egoActiveSmart : ''}`} onClick={() => handleEgoSelect('smart')}>
                     <div className={styles.egoIcon}>✨</div>
-                    <h3>Smart Bestie</h3>
-                    <p>Friendly, empathetic, and highly intelligent.</p>
+                    <h3>Normal Mode</h3>
+                    <p>Friendly, empathetic, and highly intelligent default AI.</p>
                   </div>
                   
                   <div className={`${styles.egoCard} ${activeEgo === 'savage' ? styles.egoActiveRoast : ''}`} onClick={() => handleEgoSelect('savage')}>
