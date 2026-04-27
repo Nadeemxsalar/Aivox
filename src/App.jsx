@@ -19,9 +19,11 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [toastMsg, setToastMsg] = useState(''); 
-  const [isRoasterMode, setIsRoasterMode] = useState(false); 
   
-  // 🔥 UNIFIED ADVANCED SIDEBAR STATE 🔥
+  // 🔥 ACTIVE EGO STATE 🔥
+  const [activeEgo, setActiveEgo] = useState(localStorage.getItem('aivox_alter_ego') || 'smart');
+  const [isRoasterMode, setIsRoasterMode] = useState(activeEgo === 'savage'); 
+  
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
 
@@ -42,21 +44,23 @@ function App() {
   const groqApiKey = import.meta.env.VITE_GROQ_API_KEY;
   const openRouterApiKey = import.meta.env.VITE_OPENROUTER_API_KEY;
 
-  // 🔥 ROCK-SOLID RESPONSIVE SIDEBAR LOGIC 🔥
+  // 🔥 EGO UI DETAILS 🔥
+  const egoDetails = {
+    smart: { name: "Normal Mode", color: "#8c82f2", bg: "rgba(140, 130, 242, 0.15)", icon: "✨" },
+    savage: { name: "Savage Roaster", color: "#ff4d4f", bg: "rgba(255, 77, 79, 0.15)", icon: "🔥" },
+    corporate: { name: "Strict Boss", color: "#f5b942", bg: "rgba(245, 185, 66, 0.15)", icon: "👔" },
+    genz: { name: "Gen-Z Mode", color: "#00e5ff", bg: "rgba(0, 229, 255, 0.15)", icon: "💀" }
+  };
+
   useEffect(() => {
     const mediaQuery = window.matchMedia('(max-width: 900px)');
-    
     const handleMobileChange = (e) => {
       const mobile = e.matches;
       setIsMobile(mobile);
-      setIsSidebarOpen(!mobile); // Desktop par open, Mobile par closed
+      setIsSidebarOpen(!mobile);
     };
-
-    // Initial Load Check
     setIsMobile(mediaQuery.matches);
     setIsSidebarOpen(!mediaQuery.matches);
-
-    // Event listener
     mediaQuery.addEventListener('change', handleMobileChange);
     return () => mediaQuery.removeEventListener('change', handleMobileChange);
   }, []);
@@ -103,24 +107,39 @@ function App() {
     }
     setLoading(true);
 
-    const systemPrompt = getSystemPrompt(isRoasterMode, "Nadeem");
+    const currentEgo = localStorage.getItem('aivox_alter_ego') || 'smart';
+    const isActuallyRoasting = isRoasterMode || currentEgo === 'savage';
+    const systemPrompt = getSystemPrompt(isActuallyRoasting, "Nadeem");
     let finalResponse = "";
     let finalModel = "";
     const startTime = Date.now(); 
 
     try {
       const genAI = new GoogleGenerativeAI(geminiApiKey);
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash', systemInstruction: systemPrompt, generationConfig: { maxOutputTokens: 150, temperature: isRoasterMode ? 0.8 : 0.4 } });
-      const result = await model.generateContent(textToProcess);
+      const model = genAI.getGenerativeModel({ 
+        model: 'gemini-1.5-flash', 
+        systemInstruction: systemPrompt, 
+        generationConfig: { maxOutputTokens: 250, temperature: isActuallyRoasting ? 0.8 : 0.4 } 
+      });
+
+      const smartHistory = getRelevantHistory(textToProcess, messages);
+      const geminiHistory = smartHistory.map(msg => ({
+        role: msg.role === 'ai' ? 'model' : 'user',
+        parts: [{ text: msg.text }],
+      }));
+
+      const chat = model.startChat({ history: geminiHistory });
+      const result = await chat.sendMessage(textToProcess);
       finalResponse = result.response.text();
       finalModel = "Gemini";
+
     } catch (geminiError) {
       try {
         const smartHistory = getRelevantHistory(textToProcess, messages);
         const formattedHistory = smartHistory.map(msg => ({ role: msg.role === 'ai' ? 'assistant' : 'user', content: msg.text }));
         const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
           method: "POST", headers: { "Authorization": `Bearer ${groqApiKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ model: "llama-3.1-8b-instant", messages: [{ role: "system", content: systemPrompt }, ...formattedHistory, { role: "user", content: textToProcess }], max_tokens: 150, temperature: isRoasterMode ? 0.8 : 0.4 })
+          body: JSON.stringify({ model: "llama-3.1-8b-instant", messages: [{ role: "system", content: systemPrompt }, ...formattedHistory, { role: "user", content: textToProcess }], max_tokens: 250, temperature: isActuallyRoasting ? 0.8 : 0.4 })
         });
         const groqData = await groqResponse.json();
         finalResponse = groqData.choices[0].message.content;
@@ -131,7 +150,7 @@ function App() {
             const formattedHistory = smartHistory.map(msg => ({ role: msg.role === 'ai' ? 'assistant' : 'user', content: msg.text }));
             const orResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
                 method: "POST", headers: { "Authorization": `Bearer ${openRouterApiKey}`, "Content-Type": "application/json" },
-                body: JSON.stringify({ model: "meta-llama/llama-3.1-8b-instruct:free", messages: [{ role: "system", content: systemPrompt }, ...formattedHistory, { role: "user", content: textToProcess }], max_tokens: 150, temperature: isRoasterMode ? 0.8 : 0.4 })
+                body: JSON.stringify({ model: "meta-llama/llama-3.1-8b-instruct:free", messages: [{ role: "system", content: systemPrompt }, ...formattedHistory, { role: "user", content: textToProcess }], max_tokens: 250, temperature: isActuallyRoasting ? 0.8 : 0.4 })
             });
             const orData = await orResponse.json();
             finalResponse = orData.choices[0].message.content;
@@ -149,7 +168,7 @@ function App() {
       
       if (finalModel !== "Failed" && finalResponse) {
         trackUserActivity({
-          prompt: textToProcess, response: finalResponse, model: finalModel, timeTakenMs, isRoasterMode,
+          prompt: textToProcess, response: finalResponse, model: finalModel, timeTakenMs, isRoasterMode: isActuallyRoasting,
           userName: currentDisplayName
         });
       }
@@ -198,15 +217,22 @@ function App() {
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "Aivox_Chat.txt"; a.click(); showToast("Chat Downloaded 💾");
   };
 
+  const toggleSidebarRoaster = () => {
+    const newEgo = activeEgo === 'savage' ? 'smart' : 'savage';
+    setActiveEgo(newEgo);
+    setIsRoasterMode(newEgo === 'savage');
+    localStorage.setItem('aivox_alter_ego', newEgo);
+    showToast(newEgo === 'savage' ? "Savage Mode Activated 🔥" : "Normal Mode Activated ✨");
+  };
+
   const filteredMessages = messages.filter(msg => msg.text.toLowerCase().includes(searchQuery.toLowerCase()));
 
   if (isAuthChecking) return <div className="app-container dark-mode" style={{display:'flex', justifyContent:'center', alignItems:'center', height:'100vh', color:'#8c82f2'}}>Loading...</div>;
 
   return (
-    <div className={`app-container ${isDarkMode ? 'dark-mode' : 'light-mode'} ${isRoasterMode ? 'roaster-active-theme' : ''}`}>
+    <div className={`app-container ${isDarkMode ? 'dark-mode' : 'light-mode'} ${activeEgo === 'savage' ? 'roaster-active-theme' : ''}`}>
       {toastMsg && <div className="custom-toast">{toastMsg}</div>}
 
-      {/* 🖥️ 📱 ADVANCED SIDEBAR */}
       <aside 
         className={`main-sidebar ${isSidebarOpen ? 'open' : 'closed'}`}
         style={{
@@ -242,65 +268,33 @@ function App() {
             New Chat
           </button>
 
-          {/* 🔥 5 GOD-LEVEL FEATURES UI (NOW LINKED TO /FEATURES) 🔥 */}
           <div className="features-section">
             <p className="features-title">God-Mode Capabilities</p>
-            
             <div className="feature-item" onClick={() => window.location.href = '/features'}>
-              <div className="feat-icon-box">
-                <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/></svg>
-              </div>
-              <div className="feat-text">
-                <h4>Digital Mirror</h4>
-                <p>Analyze chat psychology</p>
-              </div>
+              <div className="feat-icon-box"><svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/></svg></div>
+              <div className="feat-text"><h4>Digital Mirror</h4><p>Analyze chat psychology</p></div>
             </div>
-            
             <div className="feature-item" onClick={() => window.location.href = '/features'}>
-              <div className="feat-icon-box">
-                <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-              </div>
-              <div className="feat-text">
-                <h4>Alter-Ego Mode</h4>
-                <p>Switch AI personalities</p>
-              </div>
+              <div className="feat-icon-box"><svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+              <div className="feat-text"><h4>Alter-Ego Mode</h4><p>Switch AI personalities</p></div>
             </div>
-
             <div className="feature-item" onClick={() => window.location.href = '/features'}>
-              <div className="feat-icon-box">
-                <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-              </div>
-              <div className="feat-text">
-                <h4>Memory Lock</h4>
-                <p>Permanently save secrets</p>
-              </div>
+              <div className="feat-icon-box"><svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+              <div className="feat-text"><h4>Memory Lock</h4><p>Permanently save secrets</p></div>
             </div>
-
             <div className="feature-item" onClick={() => window.location.href = '/features'}>
-              <div className="feat-icon-box">
-                <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
-              </div>
-              <div className="feat-text">
-                <h4>Timeline Predictor</h4>
-                <p>Simulate future decisions</p>
-              </div>
+              <div className="feat-icon-box"><svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg></div>
+              <div className="feat-text"><h4>Timeline Predictor</h4><p>Simulate future decisions</p></div>
             </div>
-
             <div className="feature-item" onClick={() => window.location.href = '/features'}>
-              <div className="feat-icon-box">
-                <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-              </div>
-              <div className="feat-text">
-                <h4>Vibe Sync</h4>
-                <p>Real-time energy match</p>
-              </div>
+              <div className="feat-icon-box"><svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+              <div className="feat-text"><h4>Vibe Sync</h4><p>Real-time energy match</p></div>
             </div>
           </div>
         </div>
 
-        {/* Sidebar Footer Controls */}
         <div className="sidebar-footer">
-          <button type="button" onClick={() => { setIsRoasterMode(!isRoasterMode); showToast(isRoasterMode ? "Normal Mode Activated" : "Roaster Mode Activated 🔥"); }} className={`sidebar-action-btn ${isRoasterMode ? 'roaster-btn-active' : ''}`}>
+          <button type="button" onClick={toggleSidebarRoaster} className={`sidebar-action-btn ${activeEgo === 'savage' ? 'roaster-btn-active' : ''}`}>
             <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>
             Roaster Mode
           </button>
@@ -327,7 +321,7 @@ function App() {
         </div>
       </aside>
 
-      {/* OVERLAY FOR MOBILE SIDEBAR */}
+      {/* OVERLAY FOR MOBILE */}
       {isMobile && isSidebarOpen && (
         <div 
           className="sidebar-overlay" 
@@ -339,8 +333,9 @@ function App() {
       {/* ⬛ MAIN CHAT AREA */}
       <div className={`chat-main-area ${isSidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`}>
         <div className="chat-wrapper">
+          
           <div className="chat-header">
-            {/* 🍔 ADVANCED HAMBURGER ICON (Left) */}
+            {/* 🍔 ORIGINAL HAMBURGER ICON */}
             <button 
               type="button"
               className={`hamburger-btn ${isSidebarOpen ? 'active' : ''}`} 
@@ -352,13 +347,13 @@ function App() {
               <div className="ham-line line-3" style={{ pointerEvents: 'none' }}></div>
             </button>
 
-            {/* 🔍 SEARCH BOX (Center/Left) */}
+            {/* 🔍 ORIGINAL SEARCH BOX */}
             <div className="search-box">
                <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                <input type="text" placeholder="Search chat..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
             </div>
 
-            {/* 🛡️ LOGO AND INFO (Aligned Right) */}
+            {/* 🛡️ ORIGINAL UNTOUCHED LOGO AND INFO */}
             <div className="header-info right-aligned">
               <div className="header-text">
                 <h1>Aivox</h1>
@@ -369,13 +364,14 @@ function App() {
           </div>
 
           <div className="chat-messages" onScroll={handleScroll} ref={chatContainerRef}>
+            
             {filteredMessages.map((msg, index) => {
               const isLastAI = msg.role === 'ai' && index === messages.length - 1;
               return (
                 <div key={msg.id} className={`message-row ${msg.role}`}>
                   {msg.role === 'ai' && <img src="/logo.svg" alt="AI" className="msg-avatar" style={{ background: 'transparent' }} />}
                   <div className="message-content-wrapper">
-                    <div className={`message-bubble ${msg.role} ${msg.isBookmarked ? 'bookmarked-bubble' : ''} ${isRoasterMode && msg.role === 'ai' ? 'roast-bubble' : ''}`}>
+                    <div className={`message-bubble ${msg.role} ${msg.isBookmarked ? 'bookmarked-bubble' : ''} ${activeEgo === 'savage' && msg.role === 'ai' ? 'roast-bubble' : ''}`}>
                       {msg.role === 'ai' ? <ReactMarkdown>{msg.text}</ReactMarkdown> : <span>{msg.text}</span>}
                     </div>
                     <div className={`message-meta ${msg.role}`}>
@@ -415,7 +411,7 @@ function App() {
                   onChange={handleInputResize} 
                   onFocus={onPromptStart} 
                   onKeyDown={(e) => { onPromptKey(); handleKeyDown(e); }} 
-                  placeholder="Message Aivox..." 
+                  placeholder={activeEgo === 'smart' ? "Message Aivox..." : `Message Aivox (${egoDetails[activeEgo].name})...`}
                   disabled={loading} 
                   rows={1} 
                   className="auto-resize-textarea" 

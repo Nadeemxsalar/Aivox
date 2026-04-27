@@ -305,9 +305,11 @@ body {
 .scroll-bottom-btn:hover { transform: translateY(-4px); box-shadow: 0 12px 25px var(--shadow-color); }
 
 
-/* ─── 🔥 PIXEL PERFECT INPUT AREA FIX (Mic & Send Alignment) 🔥 ─── */
+/* ─── 🔥 PIXEL PERFECT INPUT AREA FIX (Mic & Send Alignment & Safe Padding) 🔥 ─── */
 .input-container-wrapper {
-  background: var(--app-bg); padding: 20px 24px; flex-shrink: 0;
+  background: var(--app-bg); 
+  padding: 20px 24px 30px; /* 🔥 FIXED: Desktop bottom padding badha di hai jisse counter na kate */
+  flex-shrink: 0;
   box-shadow: 0 -10px 40px rgba(0,0,0,0.03); z-index: 10;
 }
 .input-area { 
@@ -343,7 +345,14 @@ body {
 }
 .auto-resize-textarea::-webkit-scrollbar { display: none; }
 
-.char-counter { position: absolute; bottom: -18px; right: 10px; font-size: 10px; color: var(--text-muted); pointer-events: none; }
+.char-counter { 
+  position: absolute; 
+  bottom: -20px; /* 🔥 Thoda aur space diya textarea se */
+  right: 10px; 
+  font-size: 11px; 
+  color: var(--text-muted); 
+  pointer-events: none; 
+}
 
 .send-btn {
   width: 44px; height: 44px; border-radius: 50%; background: var(--bubble-user);
@@ -372,7 +381,6 @@ body {
 
 /* ─── 📱 MOBILE RESPONSIVE (100dvh & Overlay Fixed) ─── */
 .sidebar-overlay {
-  /* Using inline style for display block from React, keeping transition here */
   transition: opacity 0.3s ease;
 }
 
@@ -381,7 +389,7 @@ body {
   
   .chat-main-area { width: 100vw; }
   
-  .search-box { display: none; /* Hide search on mobile header to save space */ }
+  .search-box { display: none; }
   .message-content-wrapper { max-width: 85%; }
   .scroll-bottom-btn { bottom: 130px; right: 20px; }
 }
@@ -392,7 +400,12 @@ body {
   .header-logo { width: 34px; height: 34px; }
   
   .chat-messages { padding: 16px; gap: 16px; }
-  .input-container-wrapper { padding: 12px 16px; }
+  
+  /* 🔥 MOBILE COUNTER FIX: Bottom padding dramatically increased + safe area */
+  .input-container-wrapper { 
+    padding: 12px 16px 28px; 
+    padding-bottom: calc(28px + env(safe-area-inset-bottom)); 
+  }
   
   /* Mobile Input adjustments */
   .input-area { gap: 8px; }
