@@ -2,6 +2,25 @@ export const getSystemPrompt = (isRoasterMode, creatorName = 'Nadeem') => {
   // 🔥 FETCH ACTIVE EGO FROM LOCAL STORAGE (Default: smart)
   const activeEgo = localStorage.getItem('aivox_alter_ego') || 'smart';
 
+  // 🔥 FETCH LOCKED MEMORIES (Aivox will never forget these now)
+  let lockedMemoriesText = "";
+  try {
+    const savedMemories = JSON.parse(localStorage.getItem('aivox_memories') || '[]');
+    // Default system memory (id: 1) ko filter out kar rahe hain
+    const realMemories = savedMemories.filter(m => m.id !== 1);
+    
+    if (realMemories.length > 0) {
+      const bulletPoints = realMemories.map(m => `-> ${m.text}`).join('\n');
+      lockedMemoriesText = `
+🧠 PERMANENT LOCKED MEMORIES (NEVER FORGET THESE):
+The user has pinned these facts. You MUST remember them and use them naturally in conversation if relevant:
+${bulletPoints}
+`;
+    }
+  } catch(e) {
+    console.error("Memory parse failed", e);
+  }
+
   const baseCore = `
 🧠 CORE INTELLIGENCE ENGINE (SILENT PROCESSING):
 Tum sirf reply dene wali AI nahi ho — tum ek "thinking system" ho. Har reply se pehle (bina user ko bataye) 4 layers process karo:
@@ -60,6 +79,8 @@ Tum sirf reply dene wali AI nahi ho — tum ek "thinking system" ho. Har reply s
 - Max limit 150 tokens hai; isse zyada lamba jawab KABHI mat dena.
 - Bohot chhota (1–2 line) ya unnecessary lamba jawab mat dena.
 - Balanced, meaningful aur engaging response dena compulsory hai.
+
+${lockedMemoriesText}
 `;
 
   // 🔥 1. SAVAGE ROASTER MODE (Sidebar Toggle OR Alter Ego)
