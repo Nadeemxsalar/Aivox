@@ -1,5 +1,4 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-// 🔥 NAYE IMPORTS ADD KIYE HAIN: doc, deleteDoc, updateDoc (User manage karne ke liye)
 import { collection, getDocs, query, orderBy, doc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { db, auth } from './firebase'; 
 import { onAuthStateChanged } from 'firebase/auth';
@@ -23,20 +22,6 @@ const getWordFrequency = (logs) => {
   });
   return Object.entries(freq).sort((a,b) => b[1]-a[1]).slice(0, 40);
 };
-
-// 🔥 UNIQUE FEATURES DATA 🔥
-const aivoxFeatures = [
-  { id: 1, icon: '🧠', title: 'God-Mode Memory Matrix', desc: 'Visual map of user details, nicknames, and context. AI never forgets.', color: '#8c82f2', badge: 'Active' },
-  { id: 2, icon: '🎛️', title: 'Roast-O-Meter Engine', desc: 'Live dial to control the brutality level of the Savage Mentor mode.', color: '#ff4d4f', badge: 'Beta' },
-  { id: 3, icon: '🕵️', title: 'Hesitation Vault', desc: 'Tracks unsent prompts. What did the user type and backspace?', color: '#c542f5', badge: 'LIVE NOW' },
-  { id: 4, icon: '📖', title: 'Desi Slang Trainer', desc: 'Real-time injection of local street words to keep the AI culturally sharp.', color: '#00ff80', badge: 'Next' },
-  { id: 5, icon: '👯', title: 'Digital Twin Predictor', desc: 'Analyzes behavior patterns to predict the users exact next question.', color: '#ff8c42', badge: 'AI Core' },
-  { id: 6, icon: '🎭', title: 'Vibe-Sync Technology', desc: 'Automatically matches the users typing speed, tempo, and emotional energy.', color: '#00e5ff', badge: 'Active' },
-  { id: 7, icon: '🛑', title: 'Hallucination Catch-Net', desc: 'Quarantine zone that intercepts and blocks fake information before sending.', color: '#f5b942', badge: 'Security' },
-  { id: 8, icon: '🕸️', title: 'Personality Drift Radar', desc: 'Live chart showing how the AIs persona shifts between empathetic and brutal.', color: '#42f5b3', badge: 'Live' },
-  { id: 9, icon: '🌡️', title: 'Emotional Spectrum', desc: 'Real-time mental state graph of the user based on prompt sentiment.', color: '#ff6b9d', badge: 'Beta' },
-  { id: 10, icon: '💥', title: 'Amnesia Protocol', desc: 'One-click absolute deletion of a users digital footprint and memories.', color: '#e6e6fa', badge: 'Danger' }
-];
 
 function Admin() {
   const [logs, setLogs] = useState([]);
@@ -150,7 +135,7 @@ function Admin() {
 
   const downloadCSV = () => {
     if (logs.length === 0) return alert("No data!");
-    const headers = ["Time","Timezone","User Name","Device","OS","Browser","Network","CPU","RAM","Prompt","Response","Model","Speed(s)","Tokens","Mode","Fingerprint"];
+    const headers = ["Time","Timezone","User Name","Device","OS","Browser","Network","CPU","RAM","Prompt","Response","Model","Speed(s)","Tokens","Mode","Active Ego","Memories Locked","Vibe Pct","Fingerprint"];
     const rows = logs.map(log => [
       new Date(log.timestamp).toLocaleString().replace(/,/g, ''),
       log.timezone || 'N/A', 
@@ -164,6 +149,9 @@ function Admin() {
       log.responseTimeMs ? (log.responseTimeMs/1000).toFixed(2) : '0',
       log.totalTokens || '0',
       log.isRoasterMode ? 'Roaster' : 'Normal',
+      log.activeEgo || 'smart',
+      log.lockedMemories || '0',
+      log.vibeEnergyPct || '50',
       makeFingerprint(log)
     ]);
     const csv = "data:text/csv;charset=utf-8," + headers.join(",") + "\n" + rows.map(r => r.join(",")).join("\n");
@@ -320,6 +308,30 @@ function Admin() {
   const peakHour = hourlyData.indexOf(Math.max(...hourlyData));
   const uniqueUsers = Object.keys(chatGroups).length;
 
+  // 🔥 GOD-MODE ANALYTICS DATA CALCULATION 🔥
+  const totalLockedMemories = logs.reduce((max, log) => Math.max(max, log.lockedMemories || 0), 0);
+  const activeEgosData = logs.reduce((acc, log) => {
+    const ego = log.activeEgo || 'smart';
+    acc[ego] = (acc[ego] || 0) + 1;
+    return acc;
+  }, {});
+  const avgVibeSync = logs.length ? Math.round(logs.reduce((sum, log) => sum + (log.vibeEnergyPct || 50), 0) / logs.length) : 0;
+
+  // 🔥 NEW: Fetch Live Modes & Memory Text Data per User 🔥
+  const liveUserModes = Object.values(chatGroups).map(u => {
+    const latestMessage = u.messages[0]; // Messages are already sorted
+    return {
+      id: u.id,
+      userName: u.userName,
+      device: u.device,
+      os: u.os,
+      ego: latestMessage.activeEgo || 'smart',
+      memoryDetails: latestMessage.lockedMemoryDetails || [],
+      lastActive: latestMessage.timestamp
+    };
+  }).sort((a,b) => new Date(b.lastActive) - new Date(a.lastActive));
+
+
   useEffect(() => {
     if (filteredChatUsers.length > 0 && !selectedUser && window.innerWidth > 900) setSelectedUser(filteredChatUsers[0]);
   }, [filteredChatUsers, selectedUser]);
@@ -376,7 +388,7 @@ function Admin() {
   return (
     <div className={styles.adminLayout}>
 
-      {/* 🖥️ DESKTOP FLOATING HAMBURGER (ChatGPT Style) */}
+      {/* 🖥️ DESKTOP FLOATING HAMBURGER */}
       {isDesktop && !isSidebarVisible && (
         <button 
           onClick={() => setIsSidebarVisible(true)}
@@ -395,7 +407,7 @@ function Admin() {
         </button>
       )}
 
-      {/* 📱 MOBILE HEADER (With Advanced Staggered Hamburger) */}
+      {/* 📱 MOBILE HEADER */}
       <div className={styles.mobileHeader}>
         <h2>🚀 Aivox Admin</h2>
         <button className={styles.hamburgerBtn} onClick={() => setIsMobileMenuOpen(true)}>
@@ -419,7 +431,6 @@ function Admin() {
         <div className={styles.sidebarHeader}>
           <h2>🚀 Aivox Pro</h2>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            {/* Desktop Collapse Icon */}
             {isDesktop && (
               <button 
                 onClick={() => setIsSidebarVisible(false)} 
@@ -429,7 +440,6 @@ function Admin() {
                 <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
               </button>
             )}
-            {/* Mobile Close Icon */}
             {!isDesktop && (
                <button className={styles.closeMenuBtn} onClick={() => setIsMobileMenuOpen(false)} style={{ display: 'block' }}>✕</button>
             )}
@@ -448,7 +458,7 @@ function Admin() {
           <NavBtn tab="overview">📊 Overview</NavBtn>
           <NavBtn tab="chats">💬 User Chats</NavBtn>
           <NavBtn tab="search">🔍 Live Search</NavBtn>
-          <NavBtn tab="features">✨ Unique Features</NavBtn>
+          <NavBtn tab="features">✨ God-Mode Stats</NavBtn>
         </NavSection>
 
         <NavSection label="Access & Users">
@@ -488,28 +498,111 @@ function Admin() {
         transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)' 
       }}>
 
-        {/* ══ UNIQUE FEATURES & HESITATION VAULT ══ */}
+        {/* ══ LIVE GOD-MODE ANALYTICS & HESITATION VAULT ══ */}
         {activeTab === 'features' && (
           <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
             <header className={styles.pageHeader}>
               <div style={{ paddingLeft: (isDesktop && !isSidebarVisible) ? '40px' : '0', transition: '0.3s' }}>
-                <h1>✨ Aivox Exclusive Features</h1>
-                <p>10 God-level capabilities jo kisi standard AI mein nahi milenge.</p>
+                <h1>✨ God-Mode Analytics</h1>
+                <p>Live tracking of Aivox Pro exclusive capabilities.</p>
               </div>
             </header>
             
-            <div className={styles.featuresGrid}>
-              {aivoxFeatures.map(feat => (
-                <div key={feat.id} className={styles.featureCard} style={{'--feat-color': feat.color}}>
-                  <div className={styles.featureIconBox}>{feat.icon}</div>
-                  <h3 className={styles.featureTitle}>{feat.title}</h3>
-                  <p className={styles.featureDesc}>{feat.desc}</p>
-                  <div className={styles.featureBadge} style={{background: feat.color}}>{feat.badge}</div>
-                </div>
-              ))}
+            <div className={styles.statsGrid}>
+              <div className={styles.statCard} style={{'--stat-color':'#8c82f2'}}>
+                <h3>Alter-Egos Active</h3>
+                <p className={styles.statValue}>
+                  {Object.values(activeEgosData).reduce((a,b)=>a+b,0)}
+                </p>
+                <p className={styles.statTrend}>Top Mode: <span className={styles.statTrendUp}>
+                  {Object.entries(activeEgosData).sort((a,b)=>b[1]-a[1])[0]?.[0] || 'smart'}
+                </span></p>
+              </div>
+
+              <div className={styles.statCard} style={{'--stat-color':'#00ff80'}}>
+                <h3>Memories Locked</h3>
+                <p className={styles.statValue} style={{color: '#00ff80'}}>{totalLockedMemories}</p>
+                <p className={styles.statTrend}>Across all users</p>
+              </div>
+
+              <div className={styles.statCard} style={{'--stat-color':'#00e5ff'}}>
+                <h3>Avg. Vibe Sync</h3>
+                <p className={`${styles.statValue} ${styles.speedColor}`}>{avgVibeSync}%</p>
+                <p className={styles.statTrend}>Energy match rate</p>
+              </div>
             </div>
 
-            {/* 🔥 LIVE VAULT DATA TABLE 🔥 */}
+            <div className={styles.analyticsGrid} style={{marginTop: '24px'}}>
+              <div className={styles.analyticsCard}>
+                <h3>Ego Distribution</h3>
+                {Object.entries(activeEgosData).sort((a,b)=>b[1]-a[1]).map(([ego, count]) => {
+                  const colors = { smart: '#8c82f2', savage: '#ff4d4f', corporate: '#f5b942', genz: '#00e5ff' };
+                  return (
+                    <div key={ego} className={styles.progressRow}>
+                      <div className={styles.progressLabel}>
+                        <span style={{textTransform: 'capitalize'}}>{ego} Mode</span>
+                        <span>{count} reqs</span>
+                      </div>
+                      <div className={styles.progressBar}>
+                        <div className={styles.progressFill} style={{width:`${(count/totalRequests)*100}%`,background:colors[ego]||'#8c82f2'}}></div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 🔥 NEW: LIVE USER MODES & MEMORIES TABLE 🔥 */}
+            <div style={{ marginTop: '50px' }}>
+              <h2 style={{ color: '#00e5ff', marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                🎭 Live User Modes & Memories
+              </h2>
+              <p style={{ color: '#8a8d9e', fontSize: '14px', marginBottom: '20px' }}>
+                Dekhiye kis user ka kaunsa mode active hai aur unhone exactly kya secret save kiya hai.
+              </p>
+              <div className={styles.tableContainer} style={{ overflowX: 'auto', width: '100%', WebkitOverflowScrolling: 'touch' }}>
+                <div className={styles.tableWrapper} style={{ minWidth: '100%' }}>
+                  <table className={styles.adminTable} style={{ width: '100%', minWidth: '800px' }}>
+                    <thead>
+                      <tr><th>User & Device</th><th>Active Mode</th><th>Locked Memories (Secrets)</th><th>Last Active</th></tr>
+                    </thead>
+                    <tbody>
+                      {liveUserModes.map(u => (
+                        <tr key={u.id}>
+                          <td>
+                            <div className={styles.sysTag} style={{background:'#8c82f2', color:'#fff'}}>{u.userName}</div>
+                            <div className={styles.subText}>{u.device} • {u.os}</div>
+                          </td>
+                          <td>
+                            <span className={styles.sysTag} style={{
+                              background: u.ego==='savage'?'#ff4d4f': u.ego==='corporate'?'#f5b942': u.ego==='genz'?'#00e5ff':'#2a2a40',
+                              color: u.ego==='corporate'?'#000':'#fff', textTransform:'uppercase'
+                            }}>
+                              {u.ego === 'smart' ? '✨ Normal' : u.ego}
+                            </span>
+                          </td>
+                          <td style={{ maxWidth: '350px', whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                            {u.memoryDetails && u.memoryDetails.length > 0 ? (
+                              <ul style={{ margin: 0, paddingLeft: '16px', color: '#00ff80', fontSize: '13px', fontStyle: 'italic' }}>
+                                {u.memoryDetails.map((mem, idx) => <li key={idx} style={{marginBottom:'4px'}}>{mem}</li>)}
+                              </ul>
+                            ) : (
+                              <span style={{color: '#555', fontSize: '12px'}}>No memories locked</span>
+                            )}
+                          </td>
+                          <td className={styles.timeCol} style={{fontSize:'11px'}}>{new Date(u.lastActive).toLocaleString()}</td>
+                        </tr>
+                      ))}
+                      {liveUserModes.length === 0 && (
+                        <tr><td colSpan={4} style={{textAlign:'center',color:'#555',padding:'40px'}}>Abhi tak kisi user ka data nahi aaya 🤷‍♂️</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            {/* 🔥 HESITATION VAULT 🔥 */}
             <div style={{ marginTop: '50px' }}>
               <h2 style={{ color: '#c542f5', marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '10px' }}>
                 🕵️ Live Hesitation Vault <span className={styles.sysTag} style={{background: '#ff4d4f', color: '#fff', fontSize: '10px'}}>STRICTLY CONFIDENTIAL</span>
@@ -1259,86 +1352,6 @@ function Admin() {
           </div>
         )}
 
-        {/* ══ PERFORMANCE ══ */}
-        {activeTab === 'performance' && (
-          <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
-            <header className={styles.pageHeader}>
-              <div style={{ paddingLeft: (isDesktop && !isSidebarVisible) ? '40px' : '0', transition: '0.3s' }}>
-                <h1>⚡ AI Model Performance</h1><p>Speed, tokens, fallback analysis.</p>
-              </div>
-            </header>
-            <div className={styles.analyticsGrid}>
-              {Object.entries(modelStats).map(([model,data]) => (
-                <div key={model} className={styles.analyticsCard}>
-                  <h3 style={{color:'#f5b942'}}>{model}</h3>
-                  <div className={styles.perfStat}><span>Requests:</span><strong>{data.count}</strong></div>
-                  <div className={styles.perfStat}><span>Total Tokens:</span><strong>{data.totalTokens.toLocaleString()}</strong></div>
-                  <div className={styles.perfStat}><span>Avg Response:</span><strong>{((data.totalTime/data.count)/1000).toFixed(2)}s</strong></div>
-                  <div className={styles.perfStat}><span>Avg Tokens/Req:</span><strong>{Math.round(data.totalTokens/data.count)}</strong></div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* ══ GEO ══ */}
-        {activeTab === 'geography' && (
-          <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
-            <header className={styles.pageHeader}>
-              <div style={{ paddingLeft: (isDesktop && !isSidebarVisible) ? '40px' : '0', transition: '0.3s' }}>
-                <h1>🌍 Geography & Localization</h1><p>Timezones aur languages.</p>
-              </div>
-            </header>
-            <div className={styles.analyticsGrid}>
-              <div className={styles.analyticsCard}>
-                <h3>Top Timezones</h3>
-                {Object.entries(timezoneStats).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([tz,count]) => (
-                  <div key={tz} className={styles.progressRow}>
-                    <div className={styles.progressLabel}><span>{tz}</span><span>{count}</span></div>
-                    <div className={styles.progressBar}><div className={styles.progressFill} style={{width:`${(count/totalRequests)*100}%`,background:'#00ff80'}}></div></div>
-                  </div>
-                ))}
-              </div>
-              <div className={styles.analyticsCard}>
-                <h3>System Languages</h3>
-                {Object.entries(langStats).sort((a,b)=>b[1]-a[1]).map(([lang,count]) => (
-                  <div key={lang} className={styles.progressRow}>
-                    <div className={styles.progressLabel}><span>{lang}</span><span>{count}</span></div>
-                    <div className={styles.progressBar}><div className={styles.progressFill} style={{width:`${(count/totalRequests)*100}%`,background:'#f5b942'}}></div></div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ══ ROASTER ══ */}
-        {activeTab === 'roaster' && (
-          <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
-            <header className={styles.pageHeader}>
-              <div style={{ paddingLeft: (isDesktop && !isSidebarVisible) ? '40px' : '0', transition: '0.3s' }}>
-                <h1>🔥 Roaster vs Normal</h1><p>Mode usage deep dive.</p>
-              </div>
-            </header>
-            <div className={styles.analyticsGrid}>
-              <div className={styles.analyticsCard}>
-                <h3 style={{color:'#ff4d4f'}}>Roast Mode</h3>
-                <div className={styles.perfStat}><span>Total Prompts:</span><strong style={{color:'#ff4d4f'}}>{roasts}</strong></div>
-                <div className={styles.perfStat}><span>Tokens Burned:</span><strong>{roastTokens.toLocaleString()}</strong></div>
-                <div className={styles.perfStat}><span>Avg Tokens/Roast:</span><strong>{roasts?Math.round(roastTokens/roasts):0}</strong></div>
-                <div className={styles.perfStat}><span>% of All Requests:</span><strong>{totalRequests?((roasts/totalRequests)*100).toFixed(1):0}%</strong></div>
-              </div>
-              <div className={styles.analyticsCard}>
-                <h3 style={{color:'#8c82f2'}}>Normal Mode</h3>
-                <div className={styles.perfStat}><span>Total Prompts:</span><strong style={{color:'#8c82f2'}}>{normalCount}</strong></div>
-                <div className={styles.perfStat}><span>Tokens Used:</span><strong>{normalTokens.toLocaleString()}</strong></div>
-                <div className={styles.perfStat}><span>Avg Tokens/Normal:</span><strong>{normalCount?Math.round(normalTokens/normalCount):0}</strong></div>
-                <div className={styles.perfStat}><span>% of All Requests:</span><strong>{totalRequests?((normalCount/totalRequests)*100).toFixed(1):0}%</strong></div>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* ══ NETWORK ══ */}
         {activeTab === 'network' && (
           <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
@@ -1362,61 +1375,6 @@ function Admin() {
                 {Object.entries(cookieStats).map(([cookie,count]) => (
                   <div key={cookie} className={styles.perfStat}><span>Cookies: {cookie}</span><strong>{count}</strong></div>
                 ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ══ TOKEN ECONOMICS ══ */}
-        {activeTab === 'economics' && (
-          <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
-            <header className={styles.pageHeader}>
-              <div style={{ paddingLeft: (isDesktop && !isSidebarVisible) ? '40px' : '0', transition: '0.3s' }}>
-                <h1>💰 Token Economics</h1><p>API spend analysis.</p>
-              </div>
-            </header>
-            <div className={styles.analyticsGrid}>
-              <div className={styles.analyticsCard}>
-                <h3 style={{color:'#00e5ff'}}>Input vs Output</h3>
-                <div className={styles.perfStat}><span>Total Input (User):</span><strong>{totalInputTokens.toLocaleString()}</strong></div>
-                <div className={styles.perfStat}><span>Total Output (AI):</span><strong>{totalOutputTokens.toLocaleString()}</strong></div>
-                <div className={styles.perfStat}><span>Ratio (In:Out):</span><strong>1 : {totalInputTokens?(totalOutputTokens/totalInputTokens).toFixed(2):0}</strong></div>
-                <div className={styles.perfStat}><span>Total Combined:</span><strong>{totalTokens.toLocaleString()}</strong></div>
-              </div>
-              <div className={styles.analyticsCard}>
-                <h3 style={{color:'#f5b942'}}>Cost Estimation</h3>
-                <div className={styles.perfStat}><span>Est. Input Cost (Gemini):</span><strong>${((totalInputTokens/1000)*0.00025).toFixed(4)}</strong></div>
-                <div className={styles.perfStat}><span>Est. Output Cost (Gemini):</span><strong>${((totalOutputTokens/1000)*0.00075).toFixed(4)}</strong></div>
-                <div className={styles.perfStat}><span>Groq (Free tier):</span><strong style={{color:'#00ff80'}}>$0.00</strong></div>
-                <div className={styles.perfStat}><span>Avg Tokens/Request:</span><strong>{totalRequests?Math.round(totalTokens/totalRequests):0}</strong></div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ══ PROMPT INTEL ══ */}
-        {activeTab === 'prompts' && (
-          <div className={styles.sectionFadeIn} style={{ display: 'block', height: 'auto', paddingBottom: '60px' }}>
-            <header className={styles.pageHeader}>
-              <div style={{ paddingLeft: (isDesktop && !isSidebarVisible) ? '40px' : '0', transition: '0.3s' }}>
-                <h1>🧠 Prompt Intelligence</h1><p>Longest aur most complex queries.</p>
-              </div>
-            </header>
-            <div className={styles.tableContainer} style={{ overflowX: 'auto', width: '100%', WebkitOverflowScrolling: 'touch' }}>
-              <div className={styles.tableWrapper} style={{ minWidth: '100%' }}>
-                <table className={styles.adminTable} style={{ width: '100%', minWidth: '800px' }}>
-                  <thead><tr><th>Length</th><th>User Prompt</th><th>Tokens</th><th>Model</th></tr></thead>
-                  <tbody>
-                    {longestPrompts.map(log => (
-                      <tr key={log.id}>
-                        <td><strong style={{color:'#f5b942'}}>{log.prompt?.length}</strong></td>
-                        <td style={{maxWidth:'480px',whiteSpace:'normal',fontStyle:'italic',color:'#cdd6f4',fontSize:'13px'}}>"{log.prompt}"</td>
-                        <td>{log.totalTokens}</td>
-                        <td><span style={{color:'#8c82f2',fontSize:'11px',fontWeight:'700'}}>{log.model}</span></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
               </div>
             </div>
           </div>

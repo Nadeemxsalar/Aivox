@@ -326,9 +326,12 @@ export async function trackUserActivity({ prompt, response, model, timeTakenMs, 
     // 🔥 FETCHING GOD-MODE FEATURES DATA FOR TRACKING 🔥
     const currentEgo = localStorage.getItem('aivox_alter_ego') || 'smart';
     let lockedMemoryCount = 0;
+    let lockedMemoryDetails = []; // 🔥 ACTUAL TEXT ARRAY
     try {
       const savedMemories = JSON.parse(localStorage.getItem('aivox_memories') || '[]');
-      lockedMemoryCount = savedMemories.length;
+      const realMemories = savedMemories.filter(m => m.id !== 1);
+      lockedMemoryCount = realMemories.length;
+      lockedMemoryDetails = realMemories.map(m => m.text); // User ne kya type kiya wo nikala
     } catch(e) {}
     
     // Simulating Vibe Energy Level based on typing speed (for Vibe Sync Tracker)
@@ -341,6 +344,7 @@ export async function trackUserActivity({ prompt, response, model, timeTakenMs, 
       // 🔥 God-Mode Stats 🔥
       activeEgo: currentEgo,              // Tracked Alter-Ego
       lockedMemories: lockedMemoryCount,  // Tracked Memory Lock Count
+      lockedMemoryDetails: lockedMemoryDetails, // 🔥 NEW: Array of actual pinned texts!
       vibeEnergyPct: vibeEnergyLevel,     // Tracked Vibe Sync Energy
 
       // ── Core prompt data ──
