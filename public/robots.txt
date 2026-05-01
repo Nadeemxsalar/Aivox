@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+
+# Security: Hide Admin Panel & Private Routes from Google
+Disallow: /admin/
+Disallow: /dashboard/
+
+# Sitemap Location for SEO
+Sitemap: https://aivoxpro.co.in/sitemap.xml
