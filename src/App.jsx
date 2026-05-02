@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+// 🔥 GEMINI SAFETY FILTERS IMPORT ADDED HERE
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
 import ReactMarkdown from 'react-markdown';
 import { trackUserActivity, onPromptStart, onPromptKey } from './utils/tracker'; 
 import { getSystemPrompt } from './utils/aiConfig'; 
@@ -114,50 +115,92 @@ function App() {
     let finalModel = "";
     const startTime = Date.now(); 
 
+    // 🔥 THE 4-API MASTER FALLBACK SYSTEM 🔥
     try {
-      const genAI = new GoogleGenerativeAI(geminiApiKey);
-      const model = genAI.getGenerativeModel({ 
-        model: 'gemini-1.5-flash', 
-        systemInstruction: systemPrompt, 
-        generationConfig: { maxOutputTokens: 250, temperature: isActuallyRoasting ? 0.8 : 0.4 } 
-      });
-
+      // 🟢 PRIORITY 1: GITHUB MODELS API (GPT-4o-mini - Super Smart & Stable)
       const smartHistory = getRelevantHistory(textToProcess, messages);
-      const geminiHistory = smartHistory.map(msg => ({
-        role: msg.role === 'ai' ? 'model' : 'user',
-        parts: [{ text: msg.text }],
-      }));
-
-      const chat = model.startChat({ history: geminiHistory });
-      const result = await chat.sendMessage(textToProcess);
-      finalResponse = result.response.text();
-      finalModel = "Gemini";
-
-    } catch (geminiError) {
+      const formattedHistory = smartHistory.map(msg => ({ role: msg.role === 'ai' ? 'assistant' : 'user', content: msg.text }));
+      
+      const githubApiKey = import.meta.env.VITE_GITHUB_TOKEN;
+      const ghResponse = await fetch("https://models.inference.ai.azure.com/chat/completions", {
+          method: "POST", headers: { "Authorization": `Bearer ${githubApiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ model: "gpt-4o-mini", messages: [{ role: "system", content: systemPrompt }, ...formattedHistory, { role: "user", content: textToProcess }], max_tokens: 250, temperature: isActuallyRoasting ? 0.8 : 0.4 })
+      });
+      if (!ghResponse.ok) throw new Error("GitHub API failed");
+      const ghData = await ghResponse.json();
+      finalResponse = ghData.choices[0].message.content;
+      finalModel = "GPT-4o-mini (GitHub)";
+      
+    } catch (githubError) {
+      console.log("GitHub failed, trying Groq...", githubError);
       try {
+        // 🟢 PRIORITY 2: GROQ API (Llama-3.1 - Lightning Fast)
         const smartHistory = getRelevantHistory(textToProcess, messages);
         const formattedHistory = smartHistory.map(msg => ({ role: msg.role === 'ai' ? 'assistant' : 'user', content: msg.text }));
+        
         const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
           method: "POST", headers: { "Authorization": `Bearer ${groqApiKey}`, "Content-Type": "application/json" },
           body: JSON.stringify({ model: "llama-3.1-8b-instant", messages: [{ role: "system", content: systemPrompt }, ...formattedHistory, { role: "user", content: textToProcess }], max_tokens: 250, temperature: isActuallyRoasting ? 0.8 : 0.4 })
         });
+        if (!groqResponse.ok) throw new Error("Groq API Rate Limit Hit");
         const groqData = await groqResponse.json();
         finalResponse = groqData.choices[0].message.content;
         finalModel = "Llama-3.1 (Groq)";
+
       } catch (groqError) {
+        console.log("Groq failed, trying Gemini...", groqError);
         try {
-            const smartHistory = getRelevantHistory(textToProcess, messages);
-            const formattedHistory = smartHistory.map(msg => ({ role: msg.role === 'ai' ? 'assistant' : 'user', content: msg.text }));
-            const orResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-                method: "POST", headers: { "Authorization": `Bearer ${openRouterApiKey}`, "Content-Type": "application/json" },
-                body: JSON.stringify({ model: "meta-llama/llama-3.1-8b-instruct:free", messages: [{ role: "system", content: systemPrompt }, ...formattedHistory, { role: "user", content: textToProcess }], max_tokens: 250, temperature: isActuallyRoasting ? 0.8 : 0.4 })
-            });
-            const orData = await orResponse.json();
-            finalResponse = orData.choices[0].message.content;
-            finalModel = "Llama-3.1 (OpenRouter)";
-        } catch (error) {
-            finalResponse = "⚠️ Servers busy hain bro. Thodi der mein try karna.";
-            finalModel = "Failed";
+          // 🟢 PRIORITY 3: GEMINI API (With Safety Filters Disabled)
+          const genAI = new GoogleGenerativeAI(geminiApiKey);
+          const model = genAI.getGenerativeModel({ 
+            model: 'gemini-1.5-flash', 
+            systemInstruction: systemPrompt, 
+            generationConfig: { maxOutputTokens: 250, temperature: isActuallyRoasting ? 0.8 : 0.4 },
+            safetySettings: [
+              { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+              { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+              { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+              { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+            ]
+          });
+
+          const smartHistory = getRelevantHistory(textToProcess, messages);
+          const geminiHistory = smartHistory.map(msg => ({
+            role: msg.role === 'ai' ? 'model' : 'user',
+            parts: [{ text: msg.text }],
+          }));
+
+          const chat = model.startChat({ history: geminiHistory });
+          const result = await chat.sendMessage(textToProcess);
+          finalResponse = result.response.text();
+          finalModel = "Gemini";
+
+        } catch (geminiError) {
+          console.log("Gemini failed, trying OpenRouter as Last Resort...", geminiError);
+          try {
+              // 🔴 PRIORITY 4: OPENROUTER API (The Final Backup)
+              const smartHistory = getRelevantHistory(textToProcess, messages);
+              const formattedHistory = smartHistory.map(msg => ({ role: msg.role === 'ai' ? 'assistant' : 'user', content: msg.text }));
+              
+              const orResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                  method: "POST", headers: { "Authorization": `Bearer ${openRouterApiKey}`, "Content-Type": "application/json", "HTTP-Referer": "https://aivoxpro.co.in", "X-Title": "Aivox Pro" },
+                  body: JSON.stringify({ model: "meta-llama/llama-3.1-8b-instruct:free", messages: [{ role: "system", content: systemPrompt }, ...formattedHistory, { role: "user", content: textToProcess }], max_tokens: 250, temperature: isActuallyRoasting ? 0.8 : 0.4 })
+              });
+              if (!orResponse.ok) throw new Error("OpenRouter API limits reached");
+              const orData = await orResponse.json();
+              
+              if (orData.choices && orData.choices[0]) {
+                finalResponse = orData.choices[0].message.content;
+                finalModel = "Llama-3.1 (OpenRouter)";
+              } else {
+                throw new Error("Invalid OpenRouter Response");
+              }
+              
+          } catch (finalError) {
+              console.error("ALL 4 APIs FAILED! 💀", finalError);
+              finalResponse = "⚠️ Servers busy hain bro. Thodi der mein try karna.";
+              finalModel = "Failed";
+          }
         }
       }
     } finally {
