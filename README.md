@@ -1,3 +1,9 @@
+# 🚀 Aivox Pro
+India's best free AI chatbot.
+
+[![Live Site](https://img.shields.io/badge/Live_Site-Visit_Aivox_Pro-blue?style=for-the-badge&logo=vercel)](https://aivoxpro.co.in)
+
+
 # React + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
@@ -6,6 +12,10 @@ Currently, two official plugins are available:
 
 - [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
 - [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+
+## 🌐 Project Links
+- **Live Demo:** [aivoxpro.co.in](https://aivoxpro.co.in)
+- **Developer:** [Nadeem](https://github.com/Nadeemxsalar)
 
 ## React Compiler
 
