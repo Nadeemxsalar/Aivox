@@ -21,6 +21,9 @@ function App() {
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [toastMsg, setToastMsg] = useState(''); 
   
+  // 🔥 NEW: CUSTOM CLEAR CHAT MODAL STATE 🔥
+  const [showClearModal, setShowClearModal] = useState(false);
+  
   // 🔥 ACTIVE EGO STATE 🔥
   const [activeEgo, setActiveEgo] = useState(localStorage.getItem('aivox_alter_ego') || 'smart');
   const [isRoasterMode, setIsRoasterMode] = useState(activeEgo === 'savage'); 
@@ -275,7 +278,6 @@ function App() {
       setLoading(false);
       setTimeout(() => inputRef.current?.focus(), 100);
       
-      // 🔥 UPDATE: Ab Server Fail hone par bhi Admin panel me message jayega 🔥
       if (finalResponse) {
         trackUserActivity({
           prompt: textToProcess, response: finalResponse, model: finalModel, timeTakenMs, isRoasterMode: isActuallyRoasting,
@@ -314,31 +316,29 @@ function App() {
     recognition.start();
   };
 
-  // 🔥 UPDATE: CLEAR CHAT PE BHI SYSTEM LOG JAYEGA ADMIN KO 🔥
-  const handleClearChat = () => {
-    if(window.confirm("Sahi mein chat udani hai?")) {
-      
-      // Admin Tracker for Clear Action
-      trackUserActivity({
-        prompt: "🧹 [SYSTEM ACTION]", 
-        response: `User ne chat clear kar di hai. Delete karne se pehle chat mein **${messages.length} messages** the.`, 
-        model: "System-Log", 
-        timeTakenMs: 0, 
-        isRoasterMode: isRoasterMode,
-        userName: currentDisplayName, 
-        activeMode: activeEgo, 
-        isLoveMsg: isLoveMode
-      });
+  // 🔥 CUSTOM UI CLEAR CHAT LOGIC (Window.confirm removed) 🔥
+  const executeClearChat = () => {
+    // Admin Tracker for Clear Action
+    trackUserActivity({
+      prompt: "🧹 [SYSTEM ACTION]", 
+      response: `User ne chat clear kar di hai. Delete karne se pehle chat mein **${messages.length} messages** the.`, 
+      model: "System-Log", 
+      timeTakenMs: 0, 
+      isRoasterMode: isRoasterMode,
+      userName: currentDisplayName, 
+      activeMode: activeEgo, 
+      isLoveMsg: isLoveMode
+    });
 
-      const storageKey = isLoveMode ? 'aivox_love_chat_history' : 'aivox_chat_history';
-      const defaultGreeting = isLoveMode 
-        ? (activeEgo === 'lover_girl' ? 'Hmm... kya kar rahe ho ab? 🥺' : 'Bolo jaan, kya chal raha hai? ❤️') 
-        : 'Chat cleared! ✨';
-      const resetMsg = [{ id: Date.now(), role: 'ai', text: defaultGreeting, time: getCurrentTime(), isBookmarked: false }];
-      setMessages(resetMsg); 
-      localStorage.setItem(storageKey, JSON.stringify(resetMsg)); 
-      showToast("Chat Cleared 🗑️");
-    }
+    const storageKey = isLoveMode ? 'aivox_love_chat_history' : 'aivox_chat_history';
+    const defaultGreeting = isLoveMode 
+      ? (activeEgo === 'lover_girl' ? 'Hmm... kya kar rahe ho ab? 🥺' : 'Bolo jaan, kya chal raha hai? ❤️') 
+      : 'Chat cleared! ✨';
+    const resetMsg = [{ id: Date.now(), role: 'ai', text: defaultGreeting, time: getCurrentTime(), isBookmarked: false }];
+    setMessages(resetMsg); 
+    localStorage.setItem(storageKey, JSON.stringify(resetMsg)); 
+    showToast("Chat Cleared 🗑️");
+    setShowClearModal(false); // Modal band kardo
   };
 
   const handleDownloadChat = () => {
@@ -363,6 +363,21 @@ function App() {
   return (
     <div className={`app-container ${isDarkMode ? 'dark-mode' : 'light-mode'} ${themeClass}`}>
       {toastMsg && <div className="custom-toast">{toastMsg}</div>}
+
+      {/* 🔥 PREMIUM CUSTOM CONFIRMATION MODAL 🔥 */}
+      {showClearModal && (
+        <div className="custom-modal-overlay" onClick={() => setShowClearModal(false)} style={{ display: 'flex', position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', zIndex: 9999, alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(5px)' }}>
+          <div className="custom-modal-box" onClick={e => e.stopPropagation()} style={{ background: isDarkMode ? '#151426' : '#ffffff', padding: '24px', borderRadius: '16px', border: `1px solid ${isLoveMode ? 'rgba(255,77,133,0.3)' : 'rgba(140,130,242,0.3)'}`, width: '85%', maxWidth: '320px', textAlign: 'center', boxShadow: '0 10px 40px rgba(0,0,0,0.5)' }}>
+            <div style={{ fontSize: '40px', marginBottom: '10px' }}>{isLoveMode ? '💔' : '🧹'}</div>
+            <h3 style={{ margin: '0 0 10px 0', color: isLoveMode ? '#ff4d85' : '#8c82f2', fontSize: '20px' }}>Clear Chat?</h3>
+            <p style={{ margin: '0 0 24px 0', fontSize: '14px', color: isDarkMode ? '#a0a0b0' : '#555', lineHeight: '1.5' }}>Sahi mein saari chat udani hai? Ek baar delete hui toh wapas nahi aayegi.</p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <button onClick={() => setShowClearModal(false)} style={{ flex: 1, padding: '12px', borderRadius: '10px', border: 'none', background: isDarkMode ? '#2a2a40' : '#f0f0f0', color: isDarkMode ? '#fff' : '#333', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px', transition: '0.2s' }}>Cancel</button>
+              <button onClick={executeClearChat} style={{ flex: 1, padding: '12px', borderRadius: '10px', border: 'none', background: '#ff4d4f', color: '#fff', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px', transition: '0.2s' }}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <aside 
         className={`main-sidebar ${isSidebarOpen ? 'open' : 'closed'}`}
@@ -394,7 +409,8 @@ function App() {
         </div>
 
         <div className="sidebar-content">
-          <button type="button" className="new-chat-btn" onClick={handleClearChat} style={isLoveMode ? {background: 'linear-gradient(90deg, #ff4d85, #ff758c)'} : {}}>
+          {/* 🔥 BUTTON CLICK MODAL OPEN KAREGA 🔥 */}
+          <button type="button" className="new-chat-btn" onClick={() => setShowClearModal(true)} style={isLoveMode ? {background: 'linear-gradient(90deg, #ff4d85, #ff758c)'} : {}}>
             <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Clear Chat
           </button>
