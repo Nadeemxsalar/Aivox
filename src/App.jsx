@@ -44,6 +44,7 @@ function App() {
   const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY;
   const groqApiKey = import.meta.env.VITE_GROQ_API_KEY;
   const openRouterApiKey = import.meta.env.VITE_OPENROUTER_API_KEY;
+  const mistralApiKey = import.meta.env.VITE_MISTRAL_API_KEY; // 🔥 MISTRAL API KEY ADDED
 
   // 🔥 EGO UI DETAILS 🔥
   const egoDetails = {
@@ -115,7 +116,7 @@ function App() {
     let finalModel = "";
     const startTime = Date.now(); 
 
-    // 🔥 THE 4-API MASTER FALLBACK SYSTEM 🔥
+    // 🔥 THE 5-API MASTER FALLBACK SYSTEM 🔥
     try {
       // 🟢 PRIORITY 1: GITHUB MODELS API (GPT-4o-mini - Super Smart & Stable)
       const smartHistory = getRelevantHistory(textToProcess, messages);
@@ -132,74 +133,91 @@ function App() {
       finalModel = "GPT-4o-mini (GitHub)";
       
     } catch (githubError) {
-      console.log("GitHub failed, trying Groq...", githubError);
+      console.log("GitHub failed, trying Mistral...", githubError);
       try {
-        // 🟢 PRIORITY 2: GROQ API (Llama-3.1 - Lightning Fast)
+        // 🟢 PRIORITY 2: MISTRAL AI API (Massive Free Limit) 🔥
         const smartHistory = getRelevantHistory(textToProcess, messages);
         const formattedHistory = smartHistory.map(msg => ({ role: msg.role === 'ai' ? 'assistant' : 'user', content: msg.text }));
         
-        const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-          method: "POST", headers: { "Authorization": `Bearer ${groqApiKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ model: "llama-3.1-8b-instant", messages: [{ role: "system", content: systemPrompt }, ...formattedHistory, { role: "user", content: textToProcess }], max_tokens: 250, temperature: isActuallyRoasting ? 0.8 : 0.4 })
+        const mistralResponse = await fetch("https://api.mistral.ai/v1/chat/completions", {
+            method: "POST", headers: { "Authorization": `Bearer ${mistralApiKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ model: "mistral-small-latest", messages: [{ role: "system", content: systemPrompt }, ...formattedHistory, { role: "user", content: textToProcess }], max_tokens: 250, temperature: isActuallyRoasting ? 0.8 : 0.4 })
         });
-        if (!groqResponse.ok) throw new Error("Groq API Rate Limit Hit");
-        const groqData = await groqResponse.json();
-        finalResponse = groqData.choices[0].message.content;
-        finalModel = "Llama-3.1 (Groq)";
+        if (!mistralResponse.ok) throw new Error("Mistral API failed");
+        const mistralData = await mistralResponse.json();
+        finalResponse = mistralData.choices[0].message.content;
+        finalModel = "Mistral-Small";
 
-      } catch (groqError) {
-        console.log("Groq failed, trying Gemini...", groqError);
+      } catch (mistralError) {
+        console.log("Mistral failed, trying Groq...", mistralError);
         try {
-          // 🟢 PRIORITY 3: GEMINI API (With Safety Filters Disabled)
-          const genAI = new GoogleGenerativeAI(geminiApiKey);
-          const model = genAI.getGenerativeModel({ 
-            model: 'gemini-1.5-flash', 
-            systemInstruction: systemPrompt, 
-            generationConfig: { maxOutputTokens: 250, temperature: isActuallyRoasting ? 0.8 : 0.4 },
-            safetySettings: [
-              { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-              { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-              { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-              { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-            ]
-          });
-
+          // 🟢 PRIORITY 3: GROQ API (Llama-3.1 - Lightning Fast)
           const smartHistory = getRelevantHistory(textToProcess, messages);
-          const geminiHistory = smartHistory.map(msg => ({
-            role: msg.role === 'ai' ? 'model' : 'user',
-            parts: [{ text: msg.text }],
-          }));
+          const formattedHistory = smartHistory.map(msg => ({ role: msg.role === 'ai' ? 'assistant' : 'user', content: msg.text }));
+          
+          const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+            method: "POST", headers: { "Authorization": `Bearer ${groqApiKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ model: "llama-3.1-8b-instant", messages: [{ role: "system", content: systemPrompt }, ...formattedHistory, { role: "user", content: textToProcess }], max_tokens: 250, temperature: isActuallyRoasting ? 0.8 : 0.4 })
+          });
+          if (!groqResponse.ok) throw new Error("Groq API Rate Limit Hit");
+          const groqData = await groqResponse.json();
+          finalResponse = groqData.choices[0].message.content;
+          finalModel = "Llama-3.1 (Groq)";
 
-          const chat = model.startChat({ history: geminiHistory });
-          const result = await chat.sendMessage(textToProcess);
-          finalResponse = result.response.text();
-          finalModel = "Gemini";
-
-        } catch (geminiError) {
-          console.log("Gemini failed, trying OpenRouter as Last Resort...", geminiError);
+        } catch (groqError) {
+          console.log("Groq failed, trying Gemini...", groqError);
           try {
-              // 🔴 PRIORITY 4: OPENROUTER API (The Final Backup)
-              const smartHistory = getRelevantHistory(textToProcess, messages);
-              const formattedHistory = smartHistory.map(msg => ({ role: msg.role === 'ai' ? 'assistant' : 'user', content: msg.text }));
-              
-              const orResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-                  method: "POST", headers: { "Authorization": `Bearer ${openRouterApiKey}`, "Content-Type": "application/json", "HTTP-Referer": "https://aivoxpro.co.in", "X-Title": "Aivox Pro" },
-                  body: JSON.stringify({ model: "meta-llama/llama-3.1-8b-instruct:free", messages: [{ role: "system", content: systemPrompt }, ...formattedHistory, { role: "user", content: textToProcess }], max_tokens: 250, temperature: isActuallyRoasting ? 0.8 : 0.4 })
-              });
-              if (!orResponse.ok) throw new Error("OpenRouter API limits reached");
-              const orData = await orResponse.json();
-              
-              if (orData.choices && orData.choices[0]) {
-                finalResponse = orData.choices[0].message.content;
-                finalModel = "Llama-3.1 (OpenRouter)";
-              } else {
-                throw new Error("Invalid OpenRouter Response");
-              }
-              
-          } catch (finalError) {
-              console.error("ALL 4 APIs FAILED! 💀", finalError);
-              finalResponse = "⚠️ Servers busy hain bro. Thodi der mein try karna.";
-              finalModel = "Failed";
+            // 🟢 PRIORITY 4: GEMINI API (With Safety Filters Disabled)
+            const genAI = new GoogleGenerativeAI(geminiApiKey);
+            const model = genAI.getGenerativeModel({ 
+              model: 'gemini-1.5-flash', 
+              systemInstruction: systemPrompt, 
+              generationConfig: { maxOutputTokens: 250, temperature: isActuallyRoasting ? 0.8 : 0.4 },
+              safetySettings: [
+                { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+                { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+              ]
+            });
+
+            const smartHistory = getRelevantHistory(textToProcess, messages);
+            const geminiHistory = smartHistory.map(msg => ({
+              role: msg.role === 'ai' ? 'model' : 'user',
+              parts: [{ text: msg.text }],
+            }));
+
+            const chat = model.startChat({ history: geminiHistory });
+            const result = await chat.sendMessage(textToProcess);
+            finalResponse = result.response.text();
+            finalModel = "Gemini";
+
+          } catch (geminiError) {
+            console.log("Gemini failed, trying OpenRouter as Last Resort...", geminiError);
+            try {
+                // 🔴 PRIORITY 5: OPENROUTER API (The Final Backup)
+                const smartHistory = getRelevantHistory(textToProcess, messages);
+                const formattedHistory = smartHistory.map(msg => ({ role: msg.role === 'ai' ? 'assistant' : 'user', content: msg.text }));
+                
+                const orResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                    method: "POST", headers: { "Authorization": `Bearer ${openRouterApiKey}`, "Content-Type": "application/json", "HTTP-Referer": "https://aivoxpro.co.in", "X-Title": "Aivox Pro" },
+                    body: JSON.stringify({ model: "meta-llama/llama-3.1-8b-instruct:free", messages: [{ role: "system", content: systemPrompt }, ...formattedHistory, { role: "user", content: textToProcess }], max_tokens: 250, temperature: isActuallyRoasting ? 0.8 : 0.4 })
+                });
+                if (!orResponse.ok) throw new Error("OpenRouter API limits reached");
+                const orData = await orResponse.json();
+                
+                if (orData.choices && orData.choices[0]) {
+                  finalResponse = orData.choices[0].message.content;
+                  finalModel = "Llama-3.1 (OpenRouter)";
+                } else {
+                  throw new Error("Invalid OpenRouter Response");
+                }
+                
+            } catch (finalError) {
+                console.error("ALL 5 APIs FAILED! 💀", finalError);
+                finalResponse = "⚠️ Servers busy hain bro. Thodi der mein try karna.";
+                finalModel = "Failed";
+            }
           }
         }
       }
