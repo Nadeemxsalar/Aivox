@@ -40,8 +40,9 @@ function App() {
     const savedChats = localStorage.getItem(storageKey);
     if (savedChats) return JSON.parse(savedChats);
     
+    // 🔥 SHORT & NATURAL GREETING 🔥
     const defaultGreeting = isInitiallyLove 
-      ? (initialEgo === 'lover_girl' ? 'Babu... aa gaye tum? ❤️' : 'Jaan... kahan the itni der? ❤️')
+      ? (initialEgo === 'lover_girl' ? 'Kaise ho babu? ❤️' : 'Kaisi ho meri jaan? ❤️')
       : 'Hello! Main **Aivox** hoon. Main aapki kya madad kar sakta hoon? ✨';
       
     return [{ id: Date.now(), role: 'ai', text: defaultGreeting, time: getCurrentTime(), isBookmarked: false }];
@@ -57,13 +58,14 @@ function App() {
   const openRouterApiKey = import.meta.env.VITE_OPENROUTER_API_KEY;
   const mistralApiKey = import.meta.env.VITE_MISTRAL_API_KEY; 
 
+  // 🔥 UPDATED EGO DETAILS WITH SHORT NAMES FOR MOBILE 🔥
   const egoDetails = {
-    smart: { name: "Normal Mode", color: "#8c82f2", bg: "rgba(140, 130, 242, 0.15)", icon: "✨" },
-    savage: { name: "Savage Roaster", color: "#ff4d4f", bg: "rgba(255, 77, 79, 0.15)", icon: "🔥" },
-    corporate: { name: "Strict Boss", color: "#f5b942", bg: "rgba(245, 185, 66, 0.15)", icon: "👔" },
-    genz: { name: "Gen-Z Mode", color: "#00e5ff", bg: "rgba(0, 229, 255, 0.15)", icon: "💀" },
-    lover_girl: { name: "Girlfriend", color: "#ff4d85", bg: "rgba(255, 77, 133, 0.15)", icon: "🌸" },
-    lover_boy: { name: "Boyfriend", color: "#ff4d85", bg: "rgba(255, 77, 133, 0.15)", icon: "🦋" }
+    smart: { name: "Normal Mode", shortName: "Aivox ", color: "#8c82f2", bg: "rgba(140, 130, 242, 0.15)", icon: "✨" },
+    savage: { name: "Savage Roaster", shortName: "Roaster", color: "#ff4d4f", bg: "rgba(255, 77, 79, 0.15)", icon: "🔥" },
+    corporate: { name: "Strict Boss", shortName: "Boss Mode", color: "#f5b942", bg: "rgba(245, 185, 66, 0.15)", icon: "👔" },
+    genz: { name: "Gen-Z Mode", shortName: "Gen-Z Mode", color: "#00e5ff", bg: "rgba(0, 229, 255, 0.15)", icon: "💀" },
+    lover_girl: { name: "Girlfriend", shortName: "Girlfriend ", color: "#ff4d85", bg: "rgba(255, 77, 133, 0.15)", icon: "🌸" },
+    lover_boy: { name: "Boyfriend", shortName: "Boyfriend", color: "#ff4d85", bg: "rgba(255, 77, 133, 0.15)", icon: "🦋" }
   };
 
   useEffect(() => {
@@ -95,7 +97,6 @@ function App() {
   }, []);
 
   // 🔥 REAL-TIME CHAT SWAP LOGIC 🔥
-  // Whenever Ego changes from Features, instantly swap the chat history arrays
   useEffect(() => {
     const handleStorageChange = () => {
       const savedEgo = localStorage.getItem('aivox_alter_ego') || 'smart';
@@ -110,7 +111,7 @@ function App() {
         setMessages(JSON.parse(savedChats));
       } else {
         const defaultGreeting = checkLoveMode 
-          ? (savedEgo === 'lover_girl' ? 'Babu... kahan gayab the? ❤️' : 'Hey jaan... aa gayi tum? ❤️') 
+          ? (savedEgo === 'lover_girl' ? 'Kaise ho babu? ❤️' : 'Kaisi ho meri jaan? ❤️') 
           : 'Hello! Main **Aivox** hoon. Main aapki kya madad kar sakta hoon? ✨';
         setMessages([{ id: Date.now(), role: 'ai', text: defaultGreeting, time: getCurrentTime(), isBookmarked: false }]);
       }
@@ -274,8 +275,8 @@ function App() {
       setLoading(false);
       setTimeout(() => inputRef.current?.focus(), 100);
       
-      if (finalModel !== "Failed" && finalResponse) {
-        // 🔥 ADMIN PANEL TRACKING: Added activeMode and isLoveMsg so admin can style it later 🔥
+      // 🔥 UPDATE: Ab Server Fail hone par bhi Admin panel me message jayega 🔥
+      if (finalResponse) {
         trackUserActivity({
           prompt: textToProcess, response: finalResponse, model: finalModel, timeTakenMs, isRoasterMode: isActuallyRoasting,
           userName: currentDisplayName, activeMode: currentEgo, isLoveMsg: isCurrentlyLove
@@ -313,11 +314,25 @@ function App() {
     recognition.start();
   };
 
+  // 🔥 UPDATE: CLEAR CHAT PE BHI SYSTEM LOG JAYEGA ADMIN KO 🔥
   const handleClearChat = () => {
     if(window.confirm("Sahi mein chat udani hai?")) {
+      
+      // Admin Tracker for Clear Action
+      trackUserActivity({
+        prompt: "🧹 [SYSTEM ACTION]", 
+        response: `User ne chat clear kar di hai. Delete karne se pehle chat mein **${messages.length} messages** the.`, 
+        model: "System-Log", 
+        timeTakenMs: 0, 
+        isRoasterMode: isRoasterMode,
+        userName: currentDisplayName, 
+        activeMode: activeEgo, 
+        isLoveMsg: isLoveMode
+      });
+
       const storageKey = isLoveMode ? 'aivox_love_chat_history' : 'aivox_chat_history';
       const defaultGreeting = isLoveMode 
-        ? (activeEgo === 'lover_girl' ? 'Babu... aa gaye wapas? ❤️' : 'Hey jaan... sab theek? ❤️') 
+        ? (activeEgo === 'lover_girl' ? 'Hmm... kya kar rahe ho ab? 🥺' : 'Bolo jaan, kya chal raha hai? ❤️') 
         : 'Chat cleared! ✨';
       const resetMsg = [{ id: Date.now(), role: 'ai', text: defaultGreeting, time: getCurrentTime(), isBookmarked: false }];
       setMessages(resetMsg); 
@@ -526,7 +541,7 @@ function App() {
                   onChange={handleInputResize} 
                   onFocus={onPromptStart} 
                   onKeyDown={(e) => { onPromptKey(); handleKeyDown(e); }} 
-                  placeholder={egoDetails[activeEgo] ? `Message Aivox (${egoDetails[activeEgo].name})...` : "Message Aivox..."}
+                  placeholder={egoDetails[activeEgo] ? `Message ${egoDetails[activeEgo].shortName}...` : "Message Aivox..."}
                   disabled={loading} 
                   rows={1} 
                   className="auto-resize-textarea" 

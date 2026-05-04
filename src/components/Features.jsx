@@ -36,7 +36,7 @@ function Features() {
   const featuresList = [
     { id: 'love', title: 'Love Mode', icon: '💖', desc: 'Your Virtual Companion' },
     { id: 'mirror', title: 'Digital Mirror', icon: '🪞', desc: 'Psychology Analyzer' },
-    { id: 'alterego', title: 'Alter-Ego Mode', icon: '🎭', desc: 'Switch Personalities' },
+    { id: 'alterego', title: 'All Mode & Normal', icon: '🎭', desc: 'Switch Personalities' },
     { id: 'memory', title: 'Memory Lock', icon: '🧠', desc: 'Permanent PIN for secrets' },
     { id: 'timeline', title: 'Timeline Predictor', icon: '🌌', desc: 'Multiverse Simulation' },
     { id: 'vibe', title: 'Vibe Sync', icon: '🔮', desc: 'Live Energy Match' },
