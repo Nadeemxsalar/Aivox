@@ -79,58 +79,67 @@ function StatCard({ title, value, sub, color = '#8c82f2', subColor }) {
   );
 }
 
-// ─── SIMPLE INLINE CHART using canvas ───
-function DailyChart({ data, valueKey, label, color = '#8c82f2', formatter = v => v }) {
+// ─── SIMPLE INLINE CHART using canvas (mobile-safe) ───
+function DailyChart({ data, valueKey, color = '#8c82f2', formatter = v => v }) {
   const canvasRef = useRef(null);
+  const wrapperRef = useRef(null);
 
-  useEffect(() => {
-    if (!canvasRef.current || !data.length) return;
+  const draw = useCallback(() => {
+    if (!canvasRef.current || !data.length || !wrapperRef.current) return;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
-    const W = canvas.offsetWidth || 600;
-    const H = 180;
+    const W = wrapperRef.current.clientWidth || 300;
+    const H = 170;
     canvas.width = W;
     canvas.height = H;
     ctx.clearRect(0, 0, W, H);
 
     const vals = data.map(([, d]) => d[valueKey]);
     const maxV = Math.max(...vals, 1);
-    const barW = (W - 40) / data.length - 6;
-    const startX = 20;
+    const slotW = (W - 16) / data.length;
+    const barW = Math.max(4, slotW - 5);
+    const startX = 8;
 
     data.forEach(([day, d], i) => {
       const v = d[valueKey];
-      const barH = Math.max(4, ((v / maxV) * (H - 50)));
-      const x = startX + i * ((W - 40) / data.length);
-      const y = H - 30 - barH;
+      const barH = Math.max(4, ((v / maxV) * (H - 46)));
+      const x = startX + i * slotW + (slotW - barW) / 2;
+      const y = H - 28 - barH;
 
-      // gradient-like fill using solid color with opacity
       ctx.fillStyle = color + 'cc';
       ctx.beginPath();
-      ctx.roundRect(x, y, barW, barH, 4);
+      if (ctx.roundRect) { ctx.roundRect(x, y, barW, barH, 4); }
+      else { ctx.rect(x, y, barW, barH); }
       ctx.fill();
 
-      // value label
-      if (v > 0) {
-        ctx.fillStyle = '#fff';
-        ctx.font = '10px Inter, sans-serif';
+      if (v > 0 && barW > 16) {
+        ctx.fillStyle = '#e6e6fa';
+        ctx.font = `${Math.max(8, Math.min(10, Math.floor(slotW * 0.48)))}px Inter,sans-serif`;
         ctx.textAlign = 'center';
-        ctx.fillText(formatter(v), x + barW / 2, y - 4);
+        ctx.fillText(formatter(v), x + barW / 2, y - 3);
       }
 
-      // day label
-      ctx.fillStyle = '#6a6b8c';
-      ctx.font = '9px Inter, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(day, x + barW / 2, H - 8);
+      if (slotW > 18) {
+        ctx.fillStyle = '#6a6b8c';
+        ctx.font = `${Math.max(7, Math.min(9, Math.floor(slotW * 0.42)))}px Inter,sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillText(day.split(' ')[0], x + barW / 2, H - 6);
+      }
     });
   }, [data, valueKey, color, formatter]);
 
-  if (!data.length) return <p style={{ color: '#555', textAlign: 'center', padding: '40px 0' }}>Koi data nahi abhi 📊</p>;
+  useEffect(() => {
+    draw();
+    const ro = new ResizeObserver(draw);
+    if (wrapperRef.current) ro.observe(wrapperRef.current);
+    return () => ro.disconnect();
+  }, [draw]);
+
+  if (!data.length) return <p style={{ color: '#555', textAlign: 'center', padding: '30px 0' }}>Koi data nahi abhi 📊</p>;
 
   return (
-    <div style={{ position: 'relative', width: '100%', height: 180 }}>
-      <canvas ref={canvasRef} style={{ width: '100%', display: 'block' }} />
+    <div ref={wrapperRef} style={{ position: 'relative', width: '100%', height: 170, overflow: 'hidden' }}>
+      <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
     </div>
   );
 }
@@ -770,15 +779,15 @@ function Admin() {
             {/* Token ratio */}
             <div className={styles.analyticsCard}>
               <h3>Token Type Breakdown</h3>
-              <div style={{ display:'flex', gap:24, flexWrap:'wrap', marginBottom:16 }}>
-                <div>
-                  <div style={{ fontSize:28, fontWeight:900, color:'#8c82f2' }}>{totalInputTok.toLocaleString()}</div>
+              <div style={{ display:'flex', gap:16, flexWrap:'wrap', marginBottom:16, overflow:'hidden' }}>
+                <div style={{ minWidth:0 }}>
+                  <div style={{ fontSize:24, fontWeight:900, color:'#8c82f2' }}>{totalInputTok.toLocaleString()}</div>
                   <div style={{ fontSize:12, color:'#8a8d9e' }}>Input Tokens (User)</div>
                   <div style={{ fontSize:12, color:'#00ff80', marginTop:4 }}>${((totalInputTok/1000)*0.003).toFixed(4)} est.</div>
                 </div>
-                <div style={{ fontSize:28, color:'#555', display:'flex', alignItems:'center' }}>→</div>
-                <div>
-                  <div style={{ fontSize:28, fontWeight:900, color:'#00e5ff' }}>{totalOutputTok.toLocaleString()}</div>
+                <div style={{ fontSize:24, color:'#555', display:'flex', alignItems:'center' }}>→</div>
+                <div style={{ minWidth:0 }}>
+                  <div style={{ fontSize:24, fontWeight:900, color:'#00e5ff' }}>{totalOutputTok.toLocaleString()}</div>
                   <div style={{ fontSize:12, color:'#8a8d9e' }}>Output Tokens (AI)</div>
                   <div style={{ fontSize:12, color:'#00ff80', marginTop:4 }}>${((totalOutputTok/1000)*0.015).toFixed(4)} est.</div>
                 </div>
@@ -825,12 +834,12 @@ function Admin() {
                 ].map(row => (
                   <div key={row.label} style={{ marginBottom:20 }}>
                     <div style={{ fontSize:13, color:'#8a8d9e', marginBottom:8, fontWeight:600 }}>{row.label}</div>
-                    <div style={{ display:'flex', gap:8, alignItems:'center', fontSize:13 }}>
-                      <span style={{ color:'#ff4d4f', minWidth:80 }}>🔥 {row.roastV.toLocaleString()}</span>
-                      <div style={{ flex:1, background:'rgba(0,0,0,0.3)', borderRadius:6, height:10, overflow:'hidden' }}>
+                    <div style={{ display:'flex', gap:6, alignItems:'center', fontSize:12, overflow:'hidden' }}>
+                      <span style={{ color:'#ff4d4f', minWidth:56, fontSize:11 }}>🔥 {row.roastV.toLocaleString()}</span>
+                      <div style={{ flex:1, minWidth:0, background:'rgba(0,0,0,0.3)', borderRadius:6, height:10, overflow:'hidden' }}>
                         <div style={{ width:`${(row.roastV/(row.roastV+row.normalV||1))*100}%`, height:'100%', background:'linear-gradient(90deg,#ff4d4f,#ff6b9d)', borderRadius:6 }} />
                       </div>
-                      <span style={{ color:'#8c82f2', minWidth:80, textAlign:'right' }}>{row.normalV.toLocaleString()} ✅</span>
+                      <span style={{ color:'#8c82f2', minWidth:56, textAlign:'right', fontSize:11 }}>{row.normalV.toLocaleString()} ✅</span>
                     </div>
                   </div>
                 ))}
@@ -1008,12 +1017,12 @@ function Admin() {
                 const dayCounts = days.map(d => ({ day: d, count: logs.filter(l => l.dayOfWeek === d).length }));
                 const maxDay = Math.max(...dayCounts.map(d=>d.count), 1);
                 return (
-                  <div style={{ display:'flex', gap:8, alignItems:'flex-end', height:100, marginTop:12 }}>
+                  <div style={{ display:'flex', gap:4, alignItems:'flex-end', height:90, marginTop:12, overflow:'hidden' }}>
                     {dayCounts.map(({ day, count }) => (
-                      <div key={day} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:4 }}>
-                        <span style={{ fontSize:10, color:'#fff', fontWeight:700 }}>{count || ''}</span>
-                        <div style={{ width:'100%', height:`${Math.max(4,(count/maxDay)*80)}px`, background:'#8c82f2cc', borderRadius:'4px 4px 0 0', transition:'height 0.6s ease' }} />
-                        <span style={{ fontSize:9, color:'#6a6b8c', textAlign:'center' }}>{day.slice(0,3)}</span>
+                      <div key={day} style={{ flex:1, minWidth:0, display:'flex', flexDirection:'column', alignItems:'center', gap:3 }}>
+                        <span style={{ fontSize:9, color:'#fff', fontWeight:700 }}>{count || ''}</span>
+                        <div style={{ width:'100%', height:`${Math.max(4,(count/maxDay)*68)}px`, background:'#8c82f2cc', borderRadius:'3px 3px 0 0', transition:'height 0.6s ease' }} />
+                        <span style={{ fontSize:8, color:'#6a6b8c', textAlign:'center', whiteSpace:'nowrap', overflow:'hidden', width:'100%', textOverflow:'ellipsis' }}>{day.slice(0,3)}</span>
                       </div>
                     ))}
                   </div>
@@ -1129,7 +1138,10 @@ function Admin() {
                   const bColors = ['#ff4d4f','#f5b942','#8c82f2','#00e5ff','#00ff80'];
                   return Object.entries(buckets).map(([range, count], i) => (
                     <div key={range} className={styles.progressRow}>
-                      <div className={styles.progressLabel}><span>Vibe {range}%</span><span>{count}</span></div>
+                      <div className={styles.progressLabel} style={{ flexWrap:'nowrap', gap:8 }}>
+                        <span style={{ fontSize:12, whiteSpace:'nowrap' }}>Vibe {range}%</span>
+                        <span style={{ whiteSpace:'nowrap' }}>{count}</span>
+                      </div>
                       <div className={styles.progressBar}><div className={styles.progressFill} style={{ width:`${(count/maxB)*100}%`, background:bColors[i] }}></div></div>
                     </div>
                   ));
@@ -1251,7 +1263,11 @@ function Admin() {
                           <div className={`${styles.bubbleRow} ${styles.rowUser}`}>
                             <div className={`${styles.chatBubble} ${styles.bubbleUser}`}>
                               {log.prompt}
-                              <span className={styles.bubbleTime}>{new Date(log.timestamp).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span>
+                              <span className={styles.bubbleTime}>
+                                {new Date(log.timestamp).toLocaleDateString('en-IN', { day:'2-digit', month:'short' })}
+                                {' '}
+                                {new Date(log.timestamp).toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', hour12: true })}
+                              </span>
                             </div>
                           </div>
                           <div className={`${styles.bubbleRow} ${styles.rowAi}`}>
