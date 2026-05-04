@@ -287,8 +287,8 @@ export async function trackUnsentPrompt({ unsentText, userName }) {
   }
 }
 
-// ─── MAIN TRACKING FUNCTION ───
-export async function trackUserActivity({ prompt, response, model, timeTakenMs, isRoasterMode, userName, roastLevel = 100 }) {
+// ─── MAIN TRACKING FUNCTION (🔥 FIX: Added activeMode and isLoveMsg to the receiver) ───
+export async function trackUserActivity({ prompt, response, model, timeTakenMs, isRoasterMode, userName, activeMode, isLoveMsg, roastLevel = 100 }) {
   sessionMessageCount++;
 
   try {
@@ -341,11 +341,13 @@ export async function trackUserActivity({ prompt, response, model, timeTakenMs, 
       // ── Identity ──
       userName: userName || "Anonymous",
 
-      // 🔥 God-Mode Stats 🔥
-      activeEgo: currentEgo,              // Tracked Alter-Ego
-      lockedMemories: lockedMemoryCount,  // Tracked Memory Lock Count
-      lockedMemoryDetails: lockedMemoryDetails, // 🔥 NEW: Array of actual pinned texts!
-      vibeEnergyPct: vibeEnergyLevel,     // Tracked Vibe Sync Energy
+      // 🔥 God-Mode Stats (Admin Sync Added) 🔥
+      activeEgo: currentEgo,              
+      activeMode: activeMode || currentEgo,   // 🔥 TRACK ADMIN MODE 
+      isLoveMsg: !!isLoveMsg,                 // 🔥 TELL ADMIN THIS IS LOVE CHAT
+      lockedMemories: lockedMemoryCount,  
+      lockedMemoryDetails: lockedMemoryDetails, 
+      vibeEnergyPct: vibeEnergyLevel,     
 
       // ── Core prompt data ──
       prompt: prompt || '',

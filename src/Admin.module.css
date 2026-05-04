@@ -453,3 +453,13 @@
   .statValue, h3, h4, .perfStat strong, .reportTitle, .reportRowVal { color: #000 !important; }
   .pageHeader h1 { -webkit-text-fill-color: #000; background: none; }
 }
+/* ─── LOVE MODE ADMIN STYLES (HOT PINK UPDATE) ─── */
+.bubbleLove { 
+  background: linear-gradient(135deg, rgba(255, 20, 147, 0.15), rgba(255, 105, 180, 0.05)) !important;
+  border: 1px solid rgba(255, 20, 147, 0.5) !important; 
+  color: #fff !important; 
+  box-shadow: 0 4px 15px rgba(255, 20, 147, 0.25) !important;
+}
+.loveColor { 
+  color: #ff1493 !important; 
+}

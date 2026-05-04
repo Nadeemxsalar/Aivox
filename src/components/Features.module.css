@@ -1,6 +1,6 @@
 /* =========================================
    FEATURES MODULE STYLES (Features.module.css)
-   GOD-MODE UI (Fully Working & Responsive)
+   GOD-MODE UI (Fully Working, Dynamic & Responsive)
    ========================================= */
 
 /* 🔥 1. Base Layout & Background 🔥 */
@@ -33,7 +33,7 @@
   position: absolute; width: 60vw; height: 60vw;
   max-width: 600px; max-height: 600px; border-radius: 50%;
   filter: blur(100px); z-index: 1; opacity: 0.15;
-  transition: background 0.6s ease; /* Ego change hone par color smooth change hoga */
+  transition: background 0.6s ease; 
 }
 .glow1 { top: -10%; left: -10%; }
 .glow2 { background: #00e5ff; bottom: -10%; right: -10%; animation: floatOrb 15s infinite alternate ease-in-out;}
@@ -86,7 +86,7 @@
 .navIcon { font-size: 22px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5)); }
 .navText h4 { margin: 0 0 4px 0; font-size: 14px; font-weight: 700; color: #fff; }
 .navText p { margin: 0; font-size: 11px; color: #8a8d9e; }
-.activeIndicator { position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: #8c82f2; box-shadow: 0 0 10px #8c82f2; }
+.activeIndicator { position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: #8c82f2; box-shadow: 0 0 10px #8c82f2; transition: all 0.3s ease; }
 
 /* ─── RIGHT: Feature Content Area ─── */
 .featureContentArea {
@@ -103,7 +103,7 @@
 .contentHeader h2 { margin: 0 0 6px 0; font-size: 22px; font-weight: 800; display: flex; align-items: center; }
 .contentHeader p { margin: 0; color: #a1a1aa; font-size: 13px; }
 
-/* 🔥 SYSTEM ACTIVE BANNER (Boss Mode Indicator) 🔥 */
+/* 🔥 SYSTEM ACTIVE BANNER 🔥 */
 .activeStatusBanner {
   display: flex; align-items: center; gap: 16px; padding: 16px 20px;
   border-radius: 14px; border: 1px solid; margin-bottom: 24px;
@@ -114,16 +114,16 @@
 .statusText span { font-size: 11px; font-weight: 700; color: #cdd6f4; letter-spacing: 1px; display: block; margin-bottom: 2px; }
 .statusText h3 { margin: 0; font-size: 18px; font-weight: 900; text-transform: uppercase; letter-spacing: -0.5px; }
 
-/* 🔥 ALTER EGO CARDS 🔥 */
-.egoGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-.egoCard {
+/* 🔥 ALTER EGO & LOVE CARDS 🔥 */
+.egoGrid, .loveGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.egoCard, .loveCard {
   background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.05);
   padding: 20px; border-radius: 16px; cursor: pointer; transition: all 0.3s ease; position: relative; overflow: hidden;
 }
-.egoCard:hover { transform: translateY(-4px); background: rgba(255,255,255,0.05); }
-.egoIcon { font-size: 28px; margin-bottom: 12px; }
-.egoCard h3 { margin: 0 0 6px 0; font-size: 16px; font-weight: 700; }
-.egoCard p { margin: 0; font-size: 12px; color: #8a8d9e; line-height: 1.5; }
+.egoCard:hover, .loveCard:hover { transform: translateY(-4px); background: rgba(255,255,255,0.05); }
+.egoIcon, .loveIcon { font-size: 28px; margin-bottom: 12px; }
+.egoCard h3, .loveCard h3 { margin: 0 0 6px 0; font-size: 16px; font-weight: 700; }
+.egoCard p, .loveCard p { margin: 0; font-size: 12px; color: #8a8d9e; line-height: 1.5; }
 
 /* EGO ACTIVE STATES */
 .egoActiveSmart { border-color: #8c82f2; box-shadow: 0 4px 20px rgba(140, 130, 242, 0.15); background: linear-gradient(180deg, rgba(140,130,242,0.1), transparent); }
@@ -131,12 +131,21 @@
 .egoActiveCorp { border-color: #f5b942; box-shadow: 0 4px 20px rgba(245, 185, 66, 0.15); background: linear-gradient(180deg, rgba(245,185,66,0.1), transparent); }
 .egoActiveZ { border-color: #00e5ff; box-shadow: 0 4px 20px rgba(0, 229, 255, 0.15); background: linear-gradient(180deg, rgba(0,229,255,0.1), transparent); }
 
-/* 🔥 DIGITAL MIRROR 🔥 */
+/* 💖 LOVE MODE ACTIVE STATE & ANIMATIONS 💖 */
+.egoActiveLove { border-color: #ff4d85; box-shadow: 0 4px 20px rgba(255, 77, 133, 0.2); background: linear-gradient(180deg, rgba(255,77,133,0.1), transparent); }
+.heartbeatIcon { display: inline-block; animation: heartbeat 1.5s ease-in-out infinite both; }
+@keyframes heartbeat { 0% { transform: scale(1); } 14% { transform: scale(1.2); } 28% { transform: scale(1); } 42% { transform: scale(1.2); } 70% { transform: scale(1); } }
+
+/* 🔥 DIGITAL MIRROR (DYNAMIC STYLES) 🔥 */
+.scanPromptBox { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.05); padding: 24px; border-radius: 16px; text-align: center; }
+.scanBtn { background: linear-gradient(90deg, #8c82f2, #00e5ff); color: white; border: none; padding: 12px 24px; border-radius: 12px; font-weight: 700; cursor: pointer; transition: all 0.3s; box-shadow: 0 4px 15px rgba(140, 130, 242, 0.3); }
+.scanBtn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(140, 130, 242, 0.5); }
 .mirrorGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-.mirrorCard { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.05); padding: 20px; border-radius: 14px; }
+.mirrorCard { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.05); padding: 20px; border-radius: 14px; transition: transform 0.3s; }
+.mirrorCard:hover { transform: translateY(-2px); background: rgba(255,255,255,0.05); }
 .mirrorCard h5 { margin: 0 0 8px 0; color: #8a8d9e; font-size: 11px; text-transform: uppercase; }
 .mirrorCard h3 { margin: 0 0 8px 0; font-size: 18px; font-weight: 800; }
-.mirrorCard p { margin: 0; font-size: 12px; color: #cdd6f4; }
+.mirrorCard p { margin: 0; font-size: 12px; color: #cdd6f4; line-height: 1.5; }
 
 /* 🔥 MEMORY LOCK 🔥 */
 .memoryForm { display: flex; gap: 10px; margin-bottom: 24px; }
@@ -182,21 +191,21 @@
 .ring3 { width: 200%; height: 200%; animation: ripple 2s linear infinite 1.2s; }
 @keyframes ripple { 0% { width: 50%; height: 50%; opacity: 1; border-width: 2px; } 100% { width: 250%; height: 250%; opacity: 0; border-width: 1px; } }
 .vibeStats { width: 100%; display: flex; flex-direction: column; gap: 12px; background: rgba(0,0,0,0.3); padding: 20px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.05); }
-.vStat span { font-size: 11px; font-weight: 700; color: #8a8d9e; margin-bottom: 6px; display: block; text-transform: uppercase; }
-.vBar { width: 100%; height: 6px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; }
+.vStat span { font-size: 12px; font-weight: 700; color: #8a8d9e; margin-bottom: 8px; display: block; text-transform: uppercase; }
+.vStat b { color: #fff; font-weight: 800; }
+.vBar { width: 100%; height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; }
 .vBar div { height: 100%; border-radius: 4px; box-shadow: 0 0 10px currentColor; }
 
 /* ─── 🔥 MOBILE RESPONSIVE (Safe Layout) 🔥 ─── */
 @media (max-width: 900px) {
   .dashboardGrid { flex-direction: column; overflow-y: auto; padding-right: 5px;}
   
-  /* Horizontal Scroll Wrap for Tags */
   .featuresNav { 
     width: 100%; flex-direction: row; flex-wrap: wrap; 
     padding-bottom: 5px; height: auto; justify-content: center;
   }
   .navItem { padding: 10px 14px; width: auto; flex-grow: 1; justify-content: center; }
-  .navText p { display: none; /* Hide description on mobile to save space */ }
+  .navText p { display: none; }
   .activeIndicator { display: none; }
   
   .featureContentArea { flex: none; overflow: visible; padding: 24px; min-height: 500px;}
@@ -207,7 +216,7 @@
   .featuresHeader { flex-direction: column; align-items: flex-start; gap: 12px; padding-bottom: 15px; }
   .backBtn { top: 0; left: 0; position: relative; }
   .headerTitleBox h1 { font-size: 20px; }
-  .egoGrid, .mirrorGrid { grid-template-columns: 1fr; }
+  .egoGrid, .mirrorGrid, .loveGrid { grid-template-columns: 1fr; }
   .featureContentArea { padding: 20px; }
   .activeStatusBanner { flex-direction: column; align-items: flex-start; gap: 10px; }
   .memoryForm { flex-direction: column; }

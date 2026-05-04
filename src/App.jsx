@@ -24,16 +24,27 @@ function App() {
   // 🔥 ACTIVE EGO STATE 🔥
   const [activeEgo, setActiveEgo] = useState(localStorage.getItem('aivox_alter_ego') || 'smart');
   const [isRoasterMode, setIsRoasterMode] = useState(activeEgo === 'savage'); 
+  const isLoveMode = activeEgo === 'lover_girl' || activeEgo === 'lover_boy';
   
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
 
   const getCurrentTime = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+  // 🔥 DUAL CHAT MEMORY: Loads separate chat history based on mode 🔥
   const [messages, setMessages] = useState(() => {
-    const savedChats = localStorage.getItem('aivox_chat_history');
+    const initialEgo = localStorage.getItem('aivox_alter_ego') || 'smart';
+    const isInitiallyLove = initialEgo === 'lover_girl' || initialEgo === 'lover_boy';
+    const storageKey = isInitiallyLove ? 'aivox_love_chat_history' : 'aivox_chat_history';
+    
+    const savedChats = localStorage.getItem(storageKey);
     if (savedChats) return JSON.parse(savedChats);
-    return [{ id: Date.now(), role: 'ai', text: 'Hello! Main **Aivox** hoon. Main aapki kya madad kar sakta hoon? ✨', time: getCurrentTime(), isBookmarked: false }];
+    
+    const defaultGreeting = isInitiallyLove 
+      ? (initialEgo === 'lover_girl' ? 'Babu... aa gaye tum? ❤️' : 'Jaan... kahan the itni der? ❤️')
+      : 'Hello! Main **Aivox** hoon. Main aapki kya madad kar sakta hoon? ✨';
+      
+    return [{ id: Date.now(), role: 'ai', text: defaultGreeting, time: getCurrentTime(), isBookmarked: false }];
   });
 
   const [loading, setLoading] = useState(false);
@@ -44,14 +55,15 @@ function App() {
   const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY;
   const groqApiKey = import.meta.env.VITE_GROQ_API_KEY;
   const openRouterApiKey = import.meta.env.VITE_OPENROUTER_API_KEY;
-  const mistralApiKey = import.meta.env.VITE_MISTRAL_API_KEY; // 🔥 MISTRAL API KEY ADDED
+  const mistralApiKey = import.meta.env.VITE_MISTRAL_API_KEY; 
 
-  // 🔥 EGO UI DETAILS 🔥
   const egoDetails = {
     smart: { name: "Normal Mode", color: "#8c82f2", bg: "rgba(140, 130, 242, 0.15)", icon: "✨" },
     savage: { name: "Savage Roaster", color: "#ff4d4f", bg: "rgba(255, 77, 79, 0.15)", icon: "🔥" },
     corporate: { name: "Strict Boss", color: "#f5b942", bg: "rgba(245, 185, 66, 0.15)", icon: "👔" },
-    genz: { name: "Gen-Z Mode", color: "#00e5ff", bg: "rgba(0, 229, 255, 0.15)", icon: "💀" }
+    genz: { name: "Gen-Z Mode", color: "#00e5ff", bg: "rgba(0, 229, 255, 0.15)", icon: "💀" },
+    lover_girl: { name: "Girlfriend", color: "#ff4d85", bg: "rgba(255, 77, 133, 0.15)", icon: "🌸" },
+    lover_boy: { name: "Boyfriend", color: "#ff4d85", bg: "rgba(255, 77, 133, 0.15)", icon: "🦋" }
   };
 
   useEffect(() => {
@@ -82,7 +94,39 @@ function App() {
     return unsubscribe;
   }, []);
 
-  useEffect(() => { localStorage.setItem('aivox_chat_history', JSON.stringify(messages)); }, [messages]);
+  // 🔥 REAL-TIME CHAT SWAP LOGIC 🔥
+  // Whenever Ego changes from Features, instantly swap the chat history arrays
+  useEffect(() => {
+    const handleStorageChange = () => {
+      const savedEgo = localStorage.getItem('aivox_alter_ego') || 'smart';
+      setActiveEgo(savedEgo);
+      setIsRoasterMode(savedEgo === 'savage');
+      
+      const checkLoveMode = savedEgo === 'lover_girl' || savedEgo === 'lover_boy';
+      const storageKey = checkLoveMode ? 'aivox_love_chat_history' : 'aivox_chat_history';
+      const savedChats = localStorage.getItem(storageKey);
+      
+      if (savedChats) {
+        setMessages(JSON.parse(savedChats));
+      } else {
+        const defaultGreeting = checkLoveMode 
+          ? (savedEgo === 'lover_girl' ? 'Babu... kahan gayab the? ❤️' : 'Hey jaan... aa gayi tum? ❤️') 
+          : 'Hello! Main **Aivox** hoon. Main aapki kya madad kar sakta hoon? ✨';
+        setMessages([{ id: Date.now(), role: 'ai', text: defaultGreeting, time: getCurrentTime(), isBookmarked: false }]);
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    handleStorageChange(); 
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
+  // Save specific chat history based on mode
+  useEffect(() => { 
+    const storageKey = isLoveMode ? 'aivox_love_chat_history' : 'aivox_chat_history';
+    localStorage.setItem(storageKey, JSON.stringify(messages)); 
+  }, [messages, isLoveMode]);
+
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, loading]);
 
   const handleScroll = () => {
@@ -111,14 +155,17 @@ function App() {
 
     const currentEgo = localStorage.getItem('aivox_alter_ego') || 'smart';
     const isActuallyRoasting = isRoasterMode || currentEgo === 'savage';
-    const systemPrompt = getSystemPrompt(isActuallyRoasting, "Nadeem");
+    const isCurrentlyLove = currentEgo === 'lover_girl' || currentEgo === 'lover_boy';
+    
+    const systemPrompt = getSystemPrompt(currentEgo, "Nadeem"); 
+    
     let finalResponse = "";
     let finalModel = "";
     const startTime = Date.now(); 
 
     // 🔥 THE 5-API MASTER FALLBACK SYSTEM 🔥
     try {
-      // 🟢 PRIORITY 1: GITHUB MODELS API (GPT-4o-mini - Super Smart & Stable)
+      // 🟢 PRIORITY 1: GITHUB MODELS API
       const smartHistory = getRelevantHistory(textToProcess, messages);
       const formattedHistory = smartHistory.map(msg => ({ role: msg.role === 'ai' ? 'assistant' : 'user', content: msg.text }));
       
@@ -135,7 +182,7 @@ function App() {
     } catch (githubError) {
       console.log("GitHub failed, trying Mistral...", githubError);
       try {
-        // 🟢 PRIORITY 2: MISTRAL AI API (Massive Free Limit) 🔥
+        // 🟢 PRIORITY 2: MISTRAL AI API
         const smartHistory = getRelevantHistory(textToProcess, messages);
         const formattedHistory = smartHistory.map(msg => ({ role: msg.role === 'ai' ? 'assistant' : 'user', content: msg.text }));
         
@@ -151,7 +198,7 @@ function App() {
       } catch (mistralError) {
         console.log("Mistral failed, trying Groq...", mistralError);
         try {
-          // 🟢 PRIORITY 3: GROQ API (Llama-3.1 - Lightning Fast)
+          // 🟢 PRIORITY 3: GROQ API
           const smartHistory = getRelevantHistory(textToProcess, messages);
           const formattedHistory = smartHistory.map(msg => ({ role: msg.role === 'ai' ? 'assistant' : 'user', content: msg.text }));
           
@@ -167,7 +214,7 @@ function App() {
         } catch (groqError) {
           console.log("Groq failed, trying Gemini...", groqError);
           try {
-            // 🟢 PRIORITY 4: GEMINI API (With Safety Filters Disabled)
+            // 🟢 PRIORITY 4: GEMINI API
             const genAI = new GoogleGenerativeAI(geminiApiKey);
             const model = genAI.getGenerativeModel({ 
               model: 'gemini-1.5-flash', 
@@ -195,7 +242,7 @@ function App() {
           } catch (geminiError) {
             console.log("Gemini failed, trying OpenRouter as Last Resort...", geminiError);
             try {
-                // 🔴 PRIORITY 5: OPENROUTER API (The Final Backup)
+                // 🔴 PRIORITY 5: OPENROUTER API
                 const smartHistory = getRelevantHistory(textToProcess, messages);
                 const formattedHistory = smartHistory.map(msg => ({ role: msg.role === 'ai' ? 'assistant' : 'user', content: msg.text }));
                 
@@ -228,9 +275,10 @@ function App() {
       setTimeout(() => inputRef.current?.focus(), 100);
       
       if (finalModel !== "Failed" && finalResponse) {
+        // 🔥 ADMIN PANEL TRACKING: Added activeMode and isLoveMsg so admin can style it later 🔥
         trackUserActivity({
           prompt: textToProcess, response: finalResponse, model: finalModel, timeTakenMs, isRoasterMode: isActuallyRoasting,
-          userName: currentDisplayName
+          userName: currentDisplayName, activeMode: currentEgo, isLoveMsg: isCurrentlyLove
         });
       }
     }
@@ -267,8 +315,14 @@ function App() {
 
   const handleClearChat = () => {
     if(window.confirm("Sahi mein chat udani hai?")) {
-      const resetMsg = [{ id: Date.now(), role: 'ai', text: 'Chat cleared! ✨', time: getCurrentTime(), isBookmarked: false }];
-      setMessages(resetMsg); localStorage.setItem('aivox_chat_history', JSON.stringify(resetMsg)); showToast("Chat Cleared 🗑️");
+      const storageKey = isLoveMode ? 'aivox_love_chat_history' : 'aivox_chat_history';
+      const defaultGreeting = isLoveMode 
+        ? (activeEgo === 'lover_girl' ? 'Babu... aa gaye wapas? ❤️' : 'Hey jaan... sab theek? ❤️') 
+        : 'Chat cleared! ✨';
+      const resetMsg = [{ id: Date.now(), role: 'ai', text: defaultGreeting, time: getCurrentTime(), isBookmarked: false }];
+      setMessages(resetMsg); 
+      localStorage.setItem(storageKey, JSON.stringify(resetMsg)); 
+      showToast("Chat Cleared 🗑️");
     }
   };
 
@@ -287,11 +341,12 @@ function App() {
   };
 
   const filteredMessages = messages.filter(msg => msg.text.toLowerCase().includes(searchQuery.toLowerCase()));
+  const themeClass = activeEgo === 'savage' ? 'roaster-active-theme' : (isLoveMode ? 'love-active-theme' : '');
 
   if (isAuthChecking) return <div className="app-container dark-mode" style={{display:'flex', justifyContent:'center', alignItems:'center', height:'100vh', color:'#8c82f2'}}>Loading...</div>;
 
   return (
-    <div className={`app-container ${isDarkMode ? 'dark-mode' : 'light-mode'} ${activeEgo === 'savage' ? 'roaster-active-theme' : ''}`}>
+    <div className={`app-container ${isDarkMode ? 'dark-mode' : 'light-mode'} ${themeClass}`}>
       {toastMsg && <div className="custom-toast">{toastMsg}</div>}
 
       <aside 
@@ -312,7 +367,7 @@ function App() {
         }}
       >
         <div className="sidebar-header">
-          <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" strokeWidth="2" fill="none" style={{ color: '#8c82f2', flexShrink: 0 }}>
+          <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" strokeWidth="2" fill="none" style={{ color: isLoveMode ? '#ff4d85' : '#8c82f2', flexShrink: 0 }}>
             <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
           </svg>
           <h2>Aivox Pro</h2>
@@ -324,13 +379,19 @@ function App() {
         </div>
 
         <div className="sidebar-content">
-          <button type="button" className="new-chat-btn" onClick={handleClearChat}>
+          <button type="button" className="new-chat-btn" onClick={handleClearChat} style={isLoveMode ? {background: 'linear-gradient(90deg, #ff4d85, #ff758c)'} : {}}>
             <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Clear Chat
           </button>
 
           <div className="features-section">
             <p className="features-title">God-Mode Capabilities</p>
+            <div className="feature-item" onClick={() => window.location.href = '/features'}>
+              <div className="feat-icon-box" style={isLoveMode ? {color: '#ff4d85', borderColor: 'rgba(255, 77, 133, 0.3)'} : {}}>
+                <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+              </div>
+              <div className="feat-text"><h4>Love Mode 💖</h4><p>Virtual Companion</p></div>
+            </div>
             <div className="feature-item" onClick={() => window.location.href = '/features'}>
               <div className="feat-icon-box"><svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/></svg></div>
               <div className="feat-text"><h4>Digital Mirror</h4><p>Analyze chat psychology</p></div>
@@ -346,10 +407,6 @@ function App() {
             <div className="feature-item" onClick={() => window.location.href = '/features'}>
               <div className="feat-icon-box"><svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg></div>
               <div className="feat-text"><h4>Timeline Predictor</h4><p>Simulate future decisions</p></div>
-            </div>
-            <div className="feature-item" onClick={() => window.location.href = '/features'}>
-              <div className="feat-icon-box"><svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
-              <div className="feat-text"><h4>Vibe Sync</h4><p>Real-time energy match</p></div>
             </div>
           </div>
         </div>
@@ -396,7 +453,6 @@ function App() {
         <div className="chat-wrapper">
           
           <div className="chat-header">
-            {/* 🍔 ORIGINAL HAMBURGER ICON */}
             <button 
               type="button"
               className={`hamburger-btn ${isSidebarOpen ? 'active' : ''}`} 
@@ -408,16 +464,14 @@ function App() {
               <div className="ham-line line-3" style={{ pointerEvents: 'none' }}></div>
             </button>
 
-            {/* 🔍 ORIGINAL SEARCH BOX */}
             <div className="search-box">
                <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                <input type="text" placeholder="Search chat..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
             </div>
 
-            {/* 🛡️ ORIGINAL UNTOUCHED LOGO AND INFO */}
             <div className="header-info right-aligned">
               <div className="header-text">
-                <h1>Aivox</h1>
+                <h1 style={isLoveMode ? {textShadow: '0 4px 15px rgba(255, 77, 133, 0.4)'} : {}}>Aivox</h1>
                 <p>By <strong>Nadeem</strong></p>
               </div>
               <img src="/logo.svg" alt="Aivox Logo" className="header-logo" />
@@ -432,7 +486,7 @@ function App() {
                 <div key={msg.id} className={`message-row ${msg.role}`}>
                   {msg.role === 'ai' && <img src="/logo.svg" alt="AI" className="msg-avatar" style={{ background: 'transparent' }} />}
                   <div className="message-content-wrapper">
-                    <div className={`message-bubble ${msg.role} ${msg.isBookmarked ? 'bookmarked-bubble' : ''} ${activeEgo === 'savage' && msg.role === 'ai' ? 'roast-bubble' : ''}`}>
+                    <div className={`message-bubble ${msg.role} ${msg.isBookmarked ? 'bookmarked-bubble' : ''} ${activeEgo === 'savage' && msg.role === 'ai' ? 'roast-bubble' : ''} ${isLoveMode && msg.role === 'ai' ? 'love-bubble' : ''}`}>
                       {msg.role === 'ai' ? <ReactMarkdown>{msg.text}</ReactMarkdown> : <span>{msg.text}</span>}
                     </div>
                     <div className={`message-meta ${msg.role}`}>
@@ -452,7 +506,7 @@ function App() {
               );
             })}
             {loading && (
-              <div className="message-row ai"><img src="/logo.svg" alt="AI" className="msg-avatar" style={{ background: 'transparent' }} /><div className="message-bubble ai typing-indicator"><span></span><span></span><span></span></div></div>
+              <div className="message-row ai"><img src="/logo.svg" alt="AI" className="msg-avatar" style={{ background: 'transparent' }} /><div className={`message-bubble ai typing-indicator ${isLoveMode ? 'love-bubble' : ''}`}><span></span><span></span><span></span></div></div>
             )}
             <div ref={chatEndRef} />
           </div>
@@ -460,7 +514,7 @@ function App() {
           {showScrollBtn && <button type="button" className="scroll-bottom-btn" onClick={scrollToBottom}><svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" strokeWidth="2" fill="none"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg></button>}
 
           <div className="input-container-wrapper">
-            <form onSubmit={handleGenerate} className="input-area">
+            <form onSubmit={handleGenerate} className={`input-area ${isLoveMode ? 'love-input-area' : ''}`}>
               <button type="button" onClick={handleVoiceInput} className="mic-btn" title="Voice Input">
                 <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" strokeWidth="2" fill="none"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
               </button>
@@ -472,7 +526,7 @@ function App() {
                   onChange={handleInputResize} 
                   onFocus={onPromptStart} 
                   onKeyDown={(e) => { onPromptKey(); handleKeyDown(e); }} 
-                  placeholder={activeEgo === 'smart' ? "Message Aivox..." : `Message Aivox (${egoDetails[activeEgo].name})...`}
+                  placeholder={egoDetails[activeEgo] ? `Message Aivox (${egoDetails[activeEgo].name})...` : "Message Aivox..."}
                   disabled={loading} 
                   rows={1} 
                   className="auto-resize-textarea" 
@@ -480,7 +534,7 @@ function App() {
                 <div className="char-counter">{prompt.length} / 500</div>
               </div>
               
-              <button type="submit" disabled={!prompt.trim() || loading} className="send-btn" title="Send Message">
+              <button type="submit" disabled={!prompt.trim() || loading} className="send-btn" title="Send Message" style={isLoveMode ? {background: 'linear-gradient(135deg, #ff4d85, #ff758c)'} : {}}>
                 <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
               </button>
             </form>

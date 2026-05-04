@@ -54,7 +54,6 @@ function groupByDay(logs) {
     map[day].cost   += estimateCost(log);
     map[day].count  += 1;
   });
-  // last 14 days sorted
   return Object.entries(map)
     .sort((a, b) => new Date(a[0]) - new Date(b[0]))
     .slice(-14);
@@ -1258,30 +1257,57 @@ function Admin() {
                       </div>
                     </div>
                     <div className={styles.chatMessagesArea}>
-                      {selectedUser.messages.slice().reverse().map(log => (
-                        <div key={log.id} className={styles.chatPair}>
-                          <div className={`${styles.bubbleRow} ${styles.rowUser}`}>
-                            <div className={`${styles.chatBubble} ${styles.bubbleUser}`}>
-                              {log.prompt}
-                              <span className={styles.bubbleTime}>
-                                {new Date(log.timestamp).toLocaleDateString('en-IN', { day:'2-digit', month:'short' })}
-                                {' '}
-                                {new Date(log.timestamp).toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', hour12: true })}
-                              </span>
+                      {selectedUser.messages.slice().reverse().map(log => {
+                        // 🔥 1. LOVE MODE LOGIC 🔥
+                        const isLove = log.isLoveMsg || log.activeMode === 'lover_girl' || log.activeMode === 'lover_boy' || log.activeEgo === 'lover_girl' || log.activeEgo === 'lover_boy';
+                        const isRoast = log.isRoasterMode && !isLove; 
+                        
+                        // 🔥 2. GF/BF LABEL LOGIC 🔥
+                        let loveLabel = null;
+                        if (isLove) {
+                          if (log.activeMode === 'lover_girl' || log.activeEgo === 'lover_girl') loveLabel = 'GF 🌸';
+                          else if (log.activeMode === 'lover_boy' || log.activeEgo === 'lover_boy') loveLabel = 'BF 🦋';
+                          else loveLabel = 'LOVE 💖';
+                        }
+                        
+                        return (
+                          <div key={log.id} className={styles.chatPair}>
+                            {/* USER MESSAGE ROW */}
+                            <div className={`${styles.bubbleRow} ${styles.rowUser}`}>
+                              <div className={`${styles.chatBubble} ${styles.bubbleUser}`}>
+                                {log.prompt}
+                                <span className={styles.bubbleTime}>
+                                  {new Date(log.timestamp).toLocaleDateString('en-IN', { day:'2-digit', month:'short' })}
+                                  {' '}
+                                  {new Date(log.timestamp).toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', hour12: true })}
+                                </span>
+                              </div>
                             </div>
-                          </div>
-                          <div className={`${styles.bubbleRow} ${styles.rowAi}`}>
-                            <div className={styles.chatAvatarWrapper}><img src="/logo.svg" alt="AI" className={styles.aiSmallAvatar}/></div>
-                            <div className={`${styles.chatBubble} ${styles.bubbleAi} ${log.isRoasterMode?styles.bubbleRoast:''}`}>
-                              {log.response}
-                              <div className={styles.bubbleFooter}>
-                                <span className={styles.bubbleModel}>{log.model}</span>
-                                <span className={styles.bubbleTime}>{((log.responseTimeMs||0)/1000).toFixed(1)}s • {log.totalTokens||0} tok • ${estimateCost(log).toFixed(4)}</span>
+
+                            {/* AI MESSAGE ROW */}
+                            <div className={`${styles.bubbleRow} ${styles.rowAi}`}>
+                              <div className={styles.chatAvatarWrapper}><img src="/logo.svg" alt="AI" className={styles.aiSmallAvatar}/></div>
+                              
+                              <div className={`${styles.chatBubble} ${styles.bubbleAi} ${isRoast ? styles.bubbleRoast : ''} ${isLove ? styles.bubbleLove : ''}`}>
+                                
+                                {/* 🔥 3. GF/BF BADGE 🔥 */}
+                                {loveLabel && (
+                                  <div style={{ display: 'inline-block', fontSize: '10px', fontWeight: '900', color: '#ff1493', background: 'rgba(255, 20, 147, 0.15)', padding: '2px 7px', borderRadius: '5px', marginBottom: '6px', border: '1px solid rgba(255, 20, 147, 0.4)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                    {loveLabel}
+                                  </div>
+                                )}
+
+                                <div>{log.response}</div>
+                                
+                                <div className={styles.bubbleFooter}>
+                                  <span className={styles.bubbleModel}>{log.model}</span>
+                                  <span className={styles.bubbleTime}>{((log.responseTimeMs||0)/1000).toFixed(1)}s • {log.totalTokens||0} tok • ${estimateCost(log).toFixed(4)}</span>
+                                </div>
                               </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </>
                 ) : <div className={styles.noUserSelected}><h2>👈 Select a user</h2></div>}
@@ -1779,42 +1805,51 @@ function Admin() {
               <table className={styles.adminTable} style={{ minWidth:900 }}>
                 <thead><tr><th>Time & Zone</th><th>User & Hardware</th><th>Network & Activity</th><th>Performance</th></tr></thead>
                 <tbody>
-                  {logs.map(log => (
-                    <tr key={log.id}>
-                      <td className={styles.timeCol}>
-                        {new Date(log.timestamp).toLocaleString()}
-                        <div className={styles.subText}>🌍 {log.timezone}</div>
-                        <div style={{fontSize:'10px',color:'#444',marginTop:'2px',fontFamily:'monospace'}}>FP: {makeFingerprint(log)}</div>
-                      </td>
-                      <td>
-                        <div className={styles.sysTag} style={{background:'#8c82f2',color:'#fff'}}>{log.userName||'Anonymous'}</div>
-                        <div className={styles.subText} style={{marginTop:'4px',lineHeight:'1.6'}}>
-                          <strong>Device:</strong> {log.device||'Unknown'}<br/>
-                          <strong>OS:</strong> {log.os}<br/>
-                          <strong>RAM/CPU:</strong> {log.ramMemory||'N/A'}GB | {log.cpuCores||'N/A'} cores<br/>
-                          <strong>Screen:</strong> {log.screenResolution}<br/>
-                          <span style={{color:'#f5b942'}}><strong>Battery:</strong> {log.batteryLevel!=null?`${log.batteryLevel}% ${log.batteryCharging?'⚡':'🔋'}`:'Blocked'}</span><br/>
-                          <span style={{color:'#00e5ff'}}><strong>Media:</strong> 🎤 {log.microphoneCount||0} | 📷 {log.cameraCount||0}</span>
-                        </div>
-                      </td>
-                      <td>
-                        <div className={styles.sysTag} style={{background:'#1a3a2a',color:'#00ff80'}}>📶 {(log.network||'WIFI').toUpperCase()}</div>
-                        <div className={styles.subText} style={{lineHeight:'1.6'}}>
-                          <strong>Browser:</strong> {log.browserVendor}<br/>
-                          <strong>Lang:</strong> {log.language}<br/>
-                          <strong>Backspaces:</strong> <span style={{color:'#ff4d4f'}}>{log.backspaceCount||0}</span><br/>
-                          <strong>Touch:</strong> {log.touchSupport?'Yes 👆':'No 🖱️'}
-                        </div>
-                      </td>
-                      <td>
-                        <div className={styles.tokenTotal}>Tokens: {log.totalTokens||0}</div>
-                        <div style={{color:'#00ff80',fontSize:'11px',fontWeight:'700',marginTop:2}}>Cost: ${estimateCost(log).toFixed(5)}</div>
-                        <div className={styles.speedColor}>⚡ {log.responseTimeMs?(log.responseTimeMs/1000).toFixed(2)+'s':'N/A'}</div>
-                        <div className={styles.subText}>🤖 {log.model}</div>
-                        {log.isRoasterMode && <div style={{fontSize:'10px',color:'#ff4d4f',marginTop:'2px'}}>🔥 Roaster</div>}
-                      </td>
-                    </tr>
-                  ))}
+                  {logs.map(log => {
+                    // 🔥 SAME LOGIC FOR SYSTEM LOGS TO PREVENT CLASH 🔥
+                    const isLove = log.isLoveMsg || log.activeMode === 'lover_girl' || log.activeMode === 'lover_boy' || log.activeEgo === 'lover_girl' || log.activeEgo === 'lover_boy';
+                    const isRoast = log.isRoasterMode && !isLove;
+
+                    return (
+                      <tr key={log.id}>
+                        <td className={styles.timeCol}>
+                          {new Date(log.timestamp).toLocaleString()}
+                          <div className={styles.subText}>🌍 {log.timezone}</div>
+                          <div style={{fontSize:'10px',color:'#444',marginTop:'2px',fontFamily:'monospace'}}>FP: {makeFingerprint(log)}</div>
+                        </td>
+                        <td>
+                          <div className={styles.sysTag} style={{background:'#8c82f2',color:'#fff'}}>{log.userName||'Anonymous'}</div>
+                          <div className={styles.subText} style={{marginTop:'4px',lineHeight:'1.6'}}>
+                            <strong>Device:</strong> {log.device||'Unknown'}<br/>
+                            <strong>OS:</strong> {log.os}<br/>
+                            <strong>RAM/CPU:</strong> {log.ramMemory||'N/A'}GB | {log.cpuCores||'N/A'} cores<br/>
+                            <strong>Screen:</strong> {log.screenResolution}<br/>
+                            <span style={{color:'#f5b942'}}><strong>Battery:</strong> {log.batteryLevel!=null?`${log.batteryLevel}% ${log.batteryCharging?'⚡':'🔋'}`:'Blocked'}</span><br/>
+                            <span style={{color:'#00e5ff'}}><strong>Media:</strong> 🎤 {log.microphoneCount||0} | 📷 {log.cameraCount||0}</span>
+                          </div>
+                        </td>
+                        <td>
+                          <div className={styles.sysTag} style={{background:'#1a3a2a',color:'#00ff80'}}>📶 {(log.network||'WIFI').toUpperCase()}</div>
+                          <div className={styles.subText} style={{lineHeight:'1.6'}}>
+                            <strong>Browser:</strong> {log.browserVendor}<br/>
+                            <strong>Lang:</strong> {log.language}<br/>
+                            <strong>Backspaces:</strong> <span style={{color:'#ff4d4f'}}>{log.backspaceCount||0}</span><br/>
+                            <strong>Touch:</strong> {log.touchSupport?'Yes 👆':'No 🖱️'}
+                          </div>
+                        </td>
+                        <td>
+                          <div className={styles.tokenTotal}>Tokens: {log.totalTokens||0}</div>
+                          <div style={{color:'#00ff80',fontSize:'11px',fontWeight:'700',marginTop:2}}>Cost: ${estimateCost(log).toFixed(5)}</div>
+                          <div className={styles.speedColor}>⚡ {log.responseTimeMs?(log.responseTimeMs/1000).toFixed(2)+'s':'N/A'}</div>
+                          <div className={styles.subText}>🤖 {log.model}</div>
+                          
+                          {/* 🔥 UPDATED BADGES 🔥 */}
+                          {isRoast && <div style={{fontSize:'10px',color:'#ff4d4f',marginTop:'2px'}}>🔥 Roaster</div>}
+                          {isLove && <div style={{fontSize:'10px',color:'#ff1493',marginTop:'2px'}}>💖 Love Mode</div>}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

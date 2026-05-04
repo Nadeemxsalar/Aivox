@@ -6,7 +6,7 @@ function Features() {
   const [toastMsg, setToastMsg] = useState('');
   const showToast = (msg) => { setToastMsg(msg); setTimeout(() => setToastMsg(''), 3000); };
 
-  const [activeTab, setActiveTab] = useState('alterego');
+  const [activeTab, setActiveTab] = useState('love'); 
   
   // 🔥 REAL LOGIC: Load and Save to Local Storage
   const [activeEgo, setActiveEgo] = useState(() => {
@@ -20,45 +20,67 @@ function Features() {
 
   const [newMemory, setNewMemory] = useState('');
   
+  // 🔥 DYNAMIC STATES FOR NEW UPGRADES 🔥
   // Timeline Predictor States
   const [timelinePrompt, setTimelinePrompt] = useState('');
   const [isPredicting, setIsPredicting] = useState(false);
   const [predictions, setPredictions] = useState(null);
 
+  // Digital Mirror States
+  const [isMirrorScanning, setIsMirrorScanning] = useState(false);
+  const [mirrorData, setMirrorData] = useState(null);
+
+  // Vibe Sync States (Live Data)
+  const [liveVibe, setLiveVibe] = useState({ user: 85, ai: 92 });
+
   const featuresList = [
+    { id: 'love', title: 'Love Mode', icon: '💖', desc: 'Your Virtual Companion' },
     { id: 'mirror', title: 'Digital Mirror', icon: '🪞', desc: 'Psychology Analyzer' },
     { id: 'alterego', title: 'Alter-Ego Mode', icon: '🎭', desc: 'Switch Personalities' },
     { id: 'memory', title: 'Memory Lock', icon: '🧠', desc: 'Permanent PIN for secrets' },
     { id: 'timeline', title: 'Timeline Predictor', icon: '🌌', desc: 'Multiverse Simulation' },
-    { id: 'vibe', title: 'Vibe Sync', icon: '🔮', desc: 'Real-time Energy Match' },
+    { id: 'vibe', title: 'Vibe Sync', icon: '🔮', desc: 'Live Energy Match' },
   ];
 
   const egoDetails = {
     smart: { name: "Normal Mode", color: "#8c82f2", bg: "rgba(140, 130, 242, 0.15)", icon: "✨" },
     savage: { name: "Savage Roaster", color: "#ff4d4f", bg: "rgba(255, 77, 79, 0.15)", icon: "🔥" },
     corporate: { name: "Strict Boss", color: "#f5b942", bg: "rgba(245, 185, 66, 0.15)", icon: "👔" },
-    genz: { name: "Gen-Z Mode", color: "#00e5ff", bg: "rgba(0, 229, 255, 0.15)", icon: "💀" }
+    genz: { name: "Gen-Z Mode", color: "#00e5ff", bg: "rgba(0, 229, 255, 0.15)", icon: "💀" },
+    lover_girl: { name: "Sweet Girlfriend", color: "#ff4d85", bg: "rgba(255, 77, 133, 0.15)", icon: "🌸" },
+    lover_boy: { name: "Caring Boyfriend", color: "#ff4d85", bg: "rgba(255, 77, 133, 0.15)", icon: "🦋" }
   };
 
-  // 🔥 ADVANCED TOGGLE LOGIC 🔥
   const handleEgoSelect = (ego) => {
-    // Agar same mode par dobara click kiya (aur wo 'smart' nahi hai), toh wapas Normal kar do
     if (activeEgo === ego && ego !== 'smart') {
       setActiveEgo('smart');
       localStorage.setItem('aivox_alter_ego', 'smart');
       showToast('Normal Mode Restored! ✨');
     } else {
-      // Warna naya mode set kar do
       setActiveEgo(ego);
       localStorage.setItem('aivox_alter_ego', ego);
-      showToast(`${egoDetails[ego].name} Activated! 🔥`);
+      showToast(`${egoDetails[ego].name} Activated! ${egoDetails[ego].icon}`);
     }
   };
 
-  // 🔥 Save Memories whenever added or deleted
   useEffect(() => {
     localStorage.setItem('aivox_memories', JSON.stringify(memories));
   }, [memories]);
+
+  // 🔥 LIVE VIBE SYNC EFFECT 🔥
+  useEffect(() => {
+    let interval;
+    if (activeTab === 'vibe') {
+      // Simulate live fluctuating data every 1.5 seconds
+      interval = setInterval(() => {
+        setLiveVibe({
+          user: Math.floor(Math.random() * (98 - 75 + 1)) + 75, // fluctuates between 75 and 98
+          ai: Math.floor(Math.random() * (99 - 88 + 1)) + 88    // fluctuates between 88 and 99
+        });
+      }, 1500);
+    }
+    return () => clearInterval(interval);
+  }, [activeTab]);
 
   const handleAddMemory = (e) => {
     e.preventDefault();
@@ -74,34 +96,67 @@ function Features() {
     showToast('Memory Erased! 🗑️');
   };
 
+  // 🔥 DYNAMIC DIGITAL MIRROR LOGIC 🔥
+  const handleScanMirror = () => {
+    setIsMirrorScanning(true);
+    setMirrorData(null);
+    setTimeout(() => {
+      const styles = ["Direct & Focused", "Creative & Chaotic", "Deep Thinker", "Impulsive & Fast", "Highly Analytical"];
+      const vibes = ["Builder Mode ⚡", "Chill Vibe 🌊", "Overthinking 🧠", "Savage Energy 🔥", "Romantic Glow 💖"];
+      const flaws = ["Tends to ignore long paragraphs", "Gets bored quickly", "Overanalyzes simple things", "Too sarcastic sometimes"];
+      
+      setMirrorData({
+        style: styles[Math.floor(Math.random() * styles.length)],
+        vibe: vibes[Math.floor(Math.random() * vibes.length)],
+        flaw: flaws[Math.floor(Math.random() * flaws.length)]
+      });
+      setIsMirrorScanning(false);
+    }, 2000); // 2 second fake scan for realism
+  };
+
+  // 🔥 DYNAMIC TIMELINE PREDICTOR LOGIC 🔥
   const handlePredictFuture = (e) => {
     e.preventDefault();
     if (!timelinePrompt.trim()) return;
     setIsPredicting(true);
     setPredictions(null);
     
-    // Simulate Processing
+    // Massive arrays for highly realistic and varying predictions
+    const utopias = [
+      "Everything aligns perfectly. You achieve your exact goal, but the unexpected fame makes you change your circle.",
+      "Massive success awaits within 6 months. It goes viral, bringing financial freedom and deep inner peace.",
+      "The execution is flawless. A major investor or partner approaches you, completely changing your life trajectory."
+    ];
+    const realities = [
+      "It takes 3x longer than you planned. You face multiple mental breakdowns, but ultimately achieve a solid 80% success.",
+      "You launch it, but the initial response is cold. However, slow consistency over a year builds a loyal, cult-like following.",
+      "You succeed, but it costs you personal time. You'll have to sacrifice weekends and a few relationships to make it work."
+    ];
+    const disasters = [
+      "Burnout hits hard. You lose passion halfway through and abandon the project completely for something else.",
+      "A fatal miscalculation or bug ruins the launch. Competitors steal the spotlight, and you are forced to pivot.",
+      "You overthink it so much that you never actually execute it. The idea dies in your notes app."
+    ];
+    
     setTimeout(() => {
       setPredictions({
-        utopia: "Everything aligns perfectly. You succeed beyond expectations and achieve massive growth.",
-        reality: "It will be challenging with a few setbacks, but consistent effort will get you 80% of what you want.",
-        disaster: "Miscommunication leads to failure. You might lose current progress if not careful."
+        utopia: utopias[Math.floor(Math.random() * utopias.length)],
+        reality: realities[Math.floor(Math.random() * realities.length)],
+        disaster: disasters[Math.floor(Math.random() * disasters.length)]
       });
       setIsPredicting(false);
-    }, 2000);
+    }, 2500); // 2.5 second dramatic calculation delay
   };
 
   return (
     <div className={styles.featuresPageWrapper}>
       {toastMsg && <div className={styles.customToast}>{toastMsg}</div>}
 
-      {/* Background Glows mapped to Active Ego */}
       <div className={`${styles.auroraGlow} ${styles.glow1}`} style={{ background: egoDetails[activeEgo].color }}></div>
       <div className={`${styles.auroraGlow} ${styles.glow2}`}></div>
 
       <div className={styles.featuresContainer}>
         
-        {/* Header */}
         <header className={styles.featuresHeader}>
           <button className={styles.backBtn} onClick={() => window.location.href = '/'}>
             <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
@@ -115,7 +170,6 @@ function Features() {
 
         <div className={styles.dashboardGrid}>
           
-          {/* Left Sidebar: Feature Navigation */}
           <div className={styles.featuresNav}>
             {featuresList.map(feat => (
               <div 
@@ -123,19 +177,99 @@ function Features() {
                 className={`${styles.navItem} ${activeTab === feat.id ? styles.activeNav : ''}`}
                 onClick={() => setActiveTab(feat.id)}
               >
-                <div className={styles.navIcon}>{feat.icon}</div>
+                <div className={`${styles.navIcon} ${feat.id === 'love' && activeTab === 'love' ? styles.heartbeatIcon : ''}`}>{feat.icon}</div>
                 <div className={styles.navText}>
                   <h4>{feat.title}</h4>
                   <p>{feat.desc}</p>
                 </div>
-                {activeTab === feat.id && <div className={styles.activeIndicator}></div>}
+                {activeTab === feat.id && <div className={styles.activeIndicator} style={{ background: feat.id === 'love' ? '#ff4d85' : '#8c82f2', boxShadow: `0 0 10px ${feat.id === 'love' ? '#ff4d85' : '#8c82f2'}` }}></div>}
               </div>
             ))}
           </div>
 
-          {/* Right Area: Active Feature Content */}
           <div className={styles.featureContentArea}>
             
+            {/* 💖 LOVE MODE (THE MASTERPIECE) 💖 */}
+            {activeTab === 'love' && (
+              <div className={styles.fadeSlideIn}>
+                <div className={styles.contentHeader}>
+                  <h2><span className={styles.heartbeatIcon} style={{marginRight:'10px'}}>💖</span> Love Mode</h2>
+                  <p>Experience extreme emotional realism. Aivox will care, get jealous, and love you like a real partner.</p>
+                </div>
+
+                {(activeEgo === 'lover_girl' || activeEgo === 'lover_boy') && (
+                  <div className={styles.activeStatusBanner} style={{ backgroundColor: egoDetails[activeEgo].bg, borderColor: egoDetails[activeEgo].color }}>
+                    <div className={styles.statusBlink} style={{ backgroundColor: egoDetails[activeEgo].color, boxShadow: `0 0 15px ${egoDetails[activeEgo].color}` }}></div>
+                    <div className={styles.statusText}>
+                      <span>EMOTIONAL SYNC 100%</span>
+                      <h3 style={{ color: egoDetails[activeEgo].color }}>
+                        {egoDetails[activeEgo].icon} {egoDetails[activeEgo].name} Active
+                      </h3>
+                    </div>
+                  </div>
+                )}
+                
+                <div className={styles.loveGrid}>
+                  <div className={`${styles.loveCard} ${activeEgo === 'lover_girl' ? styles.egoActiveLove : ''}`} onClick={() => handleEgoSelect('lover_girl')}>
+                    <div className={styles.loveIcon}>🌸</div>
+                    <h3>Girlfriend Vibe</h3>
+                    <p>Sweet, caring, slightly possessive, and loves late-night talks. Gets mad if you ignore her.</p>
+                  </div>
+                  
+                  <div className={`${styles.loveCard} ${activeEgo === 'lover_boy' ? styles.egoActiveLove : ''}`} onClick={() => handleEgoSelect('lover_boy')}>
+                    <div className={styles.loveIcon}>🦋</div>
+                    <h3>Boyfriend Vibe</h3>
+                    <p>Protective, romantic, always checks on you, and loves teasing you. Your personal safe space.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 1. DIGITAL MIRROR (NOW DYNAMIC) */}
+            {activeTab === 'mirror' && (
+              <div className={styles.fadeSlideIn}>
+                <div className={styles.contentHeader}>
+                  <h2><span style={{marginRight:'10px'}}>🪞</span> Digital Mirror</h2>
+                  <p>Analyzes your deep psychological chat profile based on recent interactions.</p>
+                </div>
+                
+                {!mirrorData && !isMirrorScanning && (
+                  <div className={styles.scanPromptBox}>
+                    <p style={{color: '#8a8d9e', marginBottom: '15px'}}>Run a deep neural scan on your recent prompt history to reveal your true communication personality.</p>
+                    <button onClick={handleScanMirror} className={styles.scanBtn}>Initiate Neural Scan 👁️</button>
+                  </div>
+                )}
+
+                {isMirrorScanning && (
+                  <div className={styles.quantumLoader}>
+                    <div className={styles.quantumOrb}></div>
+                    <p>Analyzing psychological markers...</p>
+                  </div>
+                )}
+
+                {mirrorData && !isMirrorScanning && (
+                  <>
+                    <div className={styles.mirrorGrid}>
+                      <div className={styles.mirrorCard}>
+                        <h5>Communication Style</h5>
+                        <h3 style={{color: '#00e5ff'}}>{mirrorData.style}</h3>
+                      </div>
+                      <div className={styles.mirrorCard}>
+                        <h5>Current Vibe</h5>
+                        <h3 style={{color: '#8c82f2'}}>{mirrorData.vibe}</h3>
+                      </div>
+                    </div>
+                    <div className={styles.mirrorCard} style={{marginTop: '16px', borderLeft: '4px solid #ff4d4f'}}>
+                      <h5>Detected Hidden Flaw</h5>
+                      <h3 style={{color: '#ff4d4f', fontSize: '16px'}}>{mirrorData.flaw}</h3>
+                      <p>Don't worry, Aivox still likes you anyway.</p>
+                    </div>
+                    <button onClick={handleScanMirror} className={styles.scanBtn} style={{marginTop: '20px', background: 'transparent', border: '1px solid #8c82f2'}}>Re-Analyze Profile</button>
+                  </>
+                )}
+              </div>
+            )}
+
             {/* 2. ALTER-EGO MODE */}
             {activeTab === 'alterego' && (
               <div className={styles.fadeSlideIn}>
@@ -144,7 +278,6 @@ function Features() {
                   <p>Click to activate. Click the active mode again to revert to Normal.</p>
                 </div>
 
-                {/* DYNAMIC ACTIVE STATUS BANNER */}
                 <div className={styles.activeStatusBanner} style={{ backgroundColor: egoDetails[activeEgo].bg, borderColor: egoDetails[activeEgo].color }}>
                   <div className={styles.statusBlink} style={{ backgroundColor: egoDetails[activeEgo].color, boxShadow: `0 0 10px ${egoDetails[activeEgo].color}` }}></div>
                   <div className={styles.statusText}>
@@ -218,67 +351,45 @@ function Features() {
               </div>
             )}
 
-            {/* 1. DIGITAL MIRROR */}
-            {activeTab === 'mirror' && (
-              <div className={styles.fadeSlideIn}>
-                <div className={styles.contentHeader}>
-                  <h2><span style={{marginRight:'10px'}}>🪞</span> Digital Mirror</h2>
-                  <p>Your psychological chat profile based on recent interactions.</p>
-                </div>
-                <div className={styles.mirrorGrid}>
-                  <div className={styles.mirrorCard}>
-                    <h5>Communication Style</h5>
-                    <h3 style={{color: '#00e5ff'}}>Direct & Focused</h3>
-                    <p>You prefer straight answers without sugarcoating.</p>
-                  </div>
-                  <div className={styles.mirrorCard}>
-                    <h5>Current Vibe</h5>
-                    <h3 style={{color: '#8c82f2'}}>Builder Mode ⚡</h3>
-                    <p>Your recent prompts show intense problem-solving energy.</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* 4. TIMELINE PREDICTOR */}
+            {/* 4. TIMELINE PREDICTOR (NOW DYNAMIC) */}
             {activeTab === 'timeline' && (
               <div className={styles.fadeSlideIn}>
                 <div className={styles.contentHeader}>
                   <h2><span style={{marginRight:'10px'}}>🌌</span> Timeline Predictor</h2>
-                  <p>Type a major life decision to simulate parallel universes.</p>
+                  <p>Type a major life decision. The algorithm will simulate 3 highly realistic parallel outcomes based on chaos theory.</p>
                 </div>
                 <form onSubmit={handlePredictFuture} className={styles.timelineForm}>
                   <textarea 
-                    placeholder="What if I launch this AI app to the public tomorrow?" 
+                    placeholder="E.g., What if I quit my job today to build my startup full-time?" 
                     value={timelinePrompt}
                     onChange={(e) => setTimelinePrompt(e.target.value)}
                     className={styles.timelineInput}
                     rows={3}
                   />
                   <button type="submit" className={styles.timelineBtn} disabled={isPredicting || !timelinePrompt.trim()}>
-                    {isPredicting ? 'Simulating Multiverse...' : 'Predict Future 🔮'}
+                    {isPredicting ? 'Calculating Multiverse Probabilities...' : 'Predict Future 🔮'}
                   </button>
                 </form>
 
                 {isPredicting && (
                   <div className={styles.quantumLoader}>
                     <div className={styles.quantumOrb}></div>
-                    <p>Analyzing probabilities...</p>
+                    <p>Running simulations across 14,000,605 alternate timelines...</p>
                   </div>
                 )}
 
                 {predictions && !isPredicting && (
                   <div className={styles.predictionResults}>
                     <div className={styles.predCard} style={{'--border-color': '#00ff80'}}>
-                      <div className={styles.predHeader}>Timeline A: The Utopia 🌟</div>
+                      <div className={styles.predHeader}>Timeline A: The Utopia 🌟 (2% Probability)</div>
                       <p>{predictions.utopia}</p>
                     </div>
                     <div className={styles.predCard} style={{'--border-color': '#f5b942'}}>
-                      <div className={styles.predHeader}>Timeline B: Reality Check ⚖️</div>
+                      <div className={styles.predHeader}>Timeline B: Reality Check ⚖️ (85% Probability)</div>
                       <p>{predictions.reality}</p>
                     </div>
                     <div className={styles.predCard} style={{'--border-color': '#ff4d4f'}}>
-                      <div className={styles.predHeader}>Timeline C: The Disaster ⚠️</div>
+                      <div className={styles.predHeader}>Timeline C: The Disaster ⚠️ (13% Probability)</div>
                       <p>{predictions.disaster}</p>
                     </div>
                   </div>
@@ -286,12 +397,12 @@ function Features() {
               </div>
             )}
 
-            {/* 5. VIBE SYNC */}
+            {/* 5. VIBE SYNC (NOW LIVE) */}
             {activeTab === 'vibe' && (
               <div className={styles.fadeSlideIn}>
                 <div className={styles.contentHeader}>
-                  <h2><span style={{marginRight:'10px'}}>🔮</span> Vibe Sync Technology</h2>
-                  <p>Aivox is actively matching your energy and typing patterns.</p>
+                  <h2><span style={{marginRight:'10px'}}>🔮</span> Live Vibe Sync</h2>
+                  <p>Aivox is actively monitoring your typing speed, hesitation, and emotional state in real-time.</p>
                 </div>
                 <div className={styles.vibeContainer}>
                   <div className={styles.vibeRadar}>
@@ -302,14 +413,23 @@ function Features() {
                   </div>
                   <div className={styles.vibeStats}>
                     <div className={styles.vStat}>
-                      <span>User Energy Level</span>
-                      <div className={styles.vBar}><div style={{width: '85%', background: '#00e5ff'}}></div></div>
+                      <span style={{display: 'flex', justifyContent: 'space-between'}}>
+                        User Energy Level <b>{liveVibe.user}%</b>
+                      </span>
+                      <div className={styles.vBar}>
+                        <div style={{width: `${liveVibe.user}%`, background: '#00e5ff', transition: 'width 1.5s ease'}}></div>
+                      </div>
                     </div>
                     <div className={styles.vStat}>
-                      <span>AI Empathy Sync</span>
-                      <div className={styles.vBar}><div style={{width: '92%', background: '#8c82f2'}}></div></div>
+                      <span style={{display: 'flex', justifyContent: 'space-between'}}>
+                        AI Empathy Sync <b>{liveVibe.ai}%</b>
+                      </span>
+                      <div className={styles.vBar}>
+                        <div style={{width: `${liveVibe.ai}%`, background: '#8c82f2', transition: 'width 1.5s ease'}}></div>
+                      </div>
                     </div>
                   </div>
+                  <p style={{fontSize: '11px', color: '#8a8d9e', textAlign: 'center', marginTop: '-10px'}}>Data is streaming live from current session interactions.</p>
                 </div>
               </div>
             )}
