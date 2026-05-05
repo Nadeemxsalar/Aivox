@@ -283,6 +283,13 @@ body {
 .bookmarked-bubble { box-shadow: 0 0 0 2px var(--gold-star); }
 .roast-bubble { border-left: 4px solid var(--roast-accent); background: rgba(255,77,79,0.05); }
 
+/* 🔥 NEW: LOVE MODE AI BUBBLE STYLING 🔥 */
+.love-bubble {
+  background: linear-gradient(145deg, rgba(255, 77, 133, 0.05), rgba(255, 117, 140, 0.1)) !important;
+  border: 1px solid rgba(255, 77, 133, 0.4) !important;
+  box-shadow: 0 4px 15px rgba(255, 77, 133, 0.15) !important;
+}
+
 .message-meta { display: flex; align-items: center; gap: 12px; margin-top: 6px; padding: 0 6px; }
 .message-row.user .message-meta { flex-direction: row-reverse; }
 

@@ -409,7 +409,6 @@ function App() {
         </div>
 
         <div className="sidebar-content">
-          {/* 🔥 BUTTON CLICK MODAL OPEN KAREGA 🔥 */}
           <button type="button" className="new-chat-btn" onClick={() => setShowClearModal(true)} style={isLoveMode ? {background: 'linear-gradient(90deg, #ff4d85, #ff758c)'} : {}}>
             <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Clear Chat
