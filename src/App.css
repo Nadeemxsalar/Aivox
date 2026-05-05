@@ -378,13 +378,26 @@ body {
 .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
 @keyframes bounce { 0%, 60%, 100% { transform: translateY(0); opacity: 0.4; } 30% { transform: translateY(-6px); opacity: 1; } }
 
-/* ─── MARKDOWN STYLES ─── */
+/* ─── 🔥 ENHANCED MARKDOWN STYLES (Fix for Numbers & Lists) 🔥 ─── */
 .message-bubble.ai pre { background: var(--code-bg); color: var(--code-text); padding: 14px 16px; border-radius: 12px; overflow-x: auto; margin: 12px 0; font-size: 13px; }
 .message-bubble.ai code { font-family: 'Fira Code', 'Consolas', monospace; background: var(--border-color); padding: 2px 6px; border-radius: 6px; font-size: 13px; }
 .message-bubble.ai a { color: var(--bubble-user); text-decoration: underline; font-weight: 600;}
-.message-bubble.ai p { margin-bottom: 10px; }
+.message-bubble.ai p { margin-bottom: 12px; line-height: 1.6; }
 .message-bubble.ai p:last-child { margin-bottom: 0; }
-.message-bubble.ai ul { padding-left: 20px; margin-bottom: 10px; }
+
+/* 👇 Ye raha List ka Fix 👇 */
+.message-bubble.ai ul, 
+.message-bubble.ai ol { 
+  padding-left: 24px; /* Numbers ko right side space dega border se */
+  margin-bottom: 16px; 
+}
+.message-bubble.ai li { 
+  margin-bottom: 8px; /* Har point ke beech breathing space dega */
+  line-height: 1.6;
+}
+.message-bubble.ai li:last-child { 
+  margin-bottom: 0; 
+}
 
 /* ─── 📱 MOBILE RESPONSIVE (100dvh & Overlay Fixed) ─── */
 .sidebar-overlay {
