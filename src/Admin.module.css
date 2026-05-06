@@ -2,6 +2,7 @@
 .adminLayout {
   display: flex;
   height: 100vh;
+  height: 100dvh; /* Fix for mobile viewport */
   width: 100vw;
   background: radial-gradient(circle at top right, #151426 0%, #0b0a14 100%);
   color: #e6e6fa;
@@ -35,7 +36,8 @@
 /* ─── SIDEBAR ─── */
 .sidebar {
   width: 260px; background: #121120; border-right: 1px solid #1f1e2e;
-  display: flex; flex-direction: column; height: 100vh;
+  display: flex; flex-direction: column; 
+  height: 100vh; height: 100dvh; /* Fix for mobile viewport */
   z-index: 100; transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   overflow-y: auto; flex-shrink: 0;
   box-shadow: 5px 0 25px rgba(0,0,0,0.2);
@@ -357,7 +359,18 @@
     margin-left: 0; width: 100%; padding: 76px 12px 40px 12px;
     height: 100vh; overflow-y: auto; overflow-x: hidden; box-sizing: border-box;
   }
-  .sidebar { transform: translateX(-100%); position: fixed; }
+  
+  /* FIXED SIDEBAR SCROLL FOR MOBILE */
+  .sidebar { 
+    transform: translateX(-100%); 
+    position: fixed; 
+    top: 0;
+    left: 0;
+    bottom: 0;
+    height: 100dvh; 
+    padding-bottom: 80px; /* Safe space to easily scroll the last option into view */
+  }
+  
   .sidebarOpen { transform: translateX(0) !important; }
   .closeMenuBtn { display: block; }
   .menuOverlay { display: block; }
