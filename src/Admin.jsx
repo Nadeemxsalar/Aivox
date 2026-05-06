@@ -165,6 +165,9 @@ function Admin() {
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [countdown, setCountdown] = useState(30);
   const countdownRef = useRef(null);
+  
+  // 🔥 IMAGE FULL SCREEN STATE 🔥
+  const [fullScreenImage, setFullScreenImage] = useState(null);
 
   // Responsive Hook
   useEffect(() => {
@@ -875,7 +878,11 @@ function Admin() {
                       <span className={styles.sysTag} style={{ background:'#ff4d4f', color:'#fff' }}>🔥 {log.userName || 'Anonymous'}</span>
                       <span style={{ fontSize:11, color:'#8a8d9e' }}>{new Date(log.timestamp).toLocaleString()}</span>
                     </div>
-                    <div style={{ fontSize:13, color:'#ff9999', fontStyle:'italic', marginBottom:8 }}>"{log.prompt?.slice(0,120)}{(log.prompt?.length||0)>120?'…':''}"</div>
+                    {/* 🔥 ADMIN: SHOW ATTACHED IMAGE IF ANY 🔥 */}
+                    <div style={{ fontSize:13, color:'#ff9999', fontStyle:'italic', marginBottom:8 }}>
+                      {log.attachedImage && <span title="Image Attached">📸 </span>}
+                      "{log.prompt?.slice(0,120)}{(log.prompt?.length||0)>120?'…':''}"
+                    </div>
                     <div style={{ fontSize:12, color:'#cdd6f4' }}>{log.response?.slice(0,200)}{(log.response?.length||0)>200?'…':''}</div>
                   </div>
                 ))}
@@ -888,7 +895,7 @@ function Admin() {
         )}
 
         {/* ══════════════════════════════════════════
-            PROMPT INTEL (FULLY WORKING)
+            PROMPT INTEL
         ══════════════════════════════════════════ */}
         {activeTab === 'prompts' && (
           <div className={styles.sectionFadeIn} style={{ display:'block', height:'auto', paddingBottom:'60px' }}>
@@ -965,7 +972,7 @@ function Admin() {
         )}
 
         {/* ══════════════════════════════════════════
-            GEOGRAPHY & LOCALE (WORKING)
+            GEOGRAPHY & LOCALE
         ══════════════════════════════════════════ */}
         {activeTab === 'geography' && (
           <div className={styles.sectionFadeIn} style={{ display:'block', height:'auto', paddingBottom:'60px' }}>
@@ -1032,7 +1039,7 @@ function Admin() {
         )}
 
         {/* ══════════════════════════════════════════
-            AI PERFORMANCE (ENHANCED)
+            AI PERFORMANCE
         ══════════════════════════════════════════ */}
         {activeTab === 'performance' && (
           <div className={styles.sectionFadeIn} style={{ display:'block', height:'auto', paddingBottom:'60px' }}>
@@ -1215,7 +1222,7 @@ function Admin() {
         )}
 
         {/* ══════════════════════════════════════════
-            USER CHATS
+            USER CHATS (🔥 NOW WITH FULL SCREEN IMAGE ZOOM 🔥)
         ══════════════════════════════════════════ */}
         {activeTab === 'chats' && (
           <div className={styles.sectionFadeIn} style={{ height:'100%', overflow:'hidden' }}>
@@ -1258,11 +1265,9 @@ function Admin() {
                     </div>
                     <div className={styles.chatMessagesArea}>
                       {selectedUser.messages.slice().reverse().map(log => {
-                        // 🔥 1. LOVE MODE LOGIC 🔥
                         const isLove = log.isLoveMsg || log.activeMode === 'lover_girl' || log.activeMode === 'lover_boy' || log.activeEgo === 'lover_girl' || log.activeEgo === 'lover_boy';
                         const isRoast = log.isRoasterMode && !isLove; 
                         
-                        // 🔥 2. GF/BF LABEL LOGIC 🔥
                         let loveLabel = null;
                         if (isLove) {
                           if (log.activeMode === 'lover_girl' || log.activeEgo === 'lover_girl') loveLabel = 'GF 🌸';
@@ -1275,6 +1280,26 @@ function Admin() {
                             {/* USER MESSAGE ROW */}
                             <div className={`${styles.bubbleRow} ${styles.rowUser}`}>
                               <div className={`${styles.chatBubble} ${styles.bubbleUser}`}>
+                                
+                                {/* 🔥 ADMIN IMAGE VIEWER: ZOOM ON CLICK 🔥 */}
+                                {log.attachedImage && (
+                                  <div style={{ marginBottom: log.prompt ? '12px' : '0' }}>
+                                    <img 
+                                      src={log.attachedImage} 
+                                      alt="User Uploaded" 
+                                      onClick={() => setFullScreenImage(log.attachedImage)}
+                                      style={{ 
+                                        maxWidth: '100%', 
+                                        maxHeight: '200px', 
+                                        borderRadius: '8px', 
+                                        boxShadow: '0 4px 15px rgba(0,0,0,0.2)',
+                                        display: 'block',
+                                        cursor: 'zoom-in'
+                                      }} 
+                                    />
+                                  </div>
+                                )}
+
                                 {log.prompt}
                                 <span className={styles.bubbleTime}>
                                   {new Date(log.timestamp).toLocaleDateString('en-IN', { day:'2-digit', month:'short' })}
@@ -1290,7 +1315,6 @@ function Admin() {
                               
                               <div className={`${styles.chatBubble} ${styles.bubbleAi} ${isRoast ? styles.bubbleRoast : ''} ${isLove ? styles.bubbleLove : ''}`}>
                                 
-                                {/* 🔥 3. GF/BF BADGE 🔥 */}
                                 {loveLabel && (
                                   <div style={{ display: 'inline-block', fontSize: '10px', fontWeight: '900', color: '#ff1493', background: 'rgba(255, 20, 147, 0.15)', padding: '2px 7px', borderRadius: '5px', marginBottom: '6px', border: '1px solid rgba(255, 20, 147, 0.4)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                                     {loveLabel}
@@ -1342,7 +1366,19 @@ function Admin() {
                         <div className={styles.sysTag} style={{background:'#8c82f2',color:'#fff'}}>{log.userName||'?'}</div>
                         <div className={styles.subText}>{log.device||'?'} • {log.os}</div>
                       </td>
-                      <td style={{maxWidth:'240px',fontSize:'13px',color:'#cdd6f4',fontStyle:'italic'}}>"{log.prompt?.slice(0,100)}{(log.prompt?.length||0)>100?'…':''}"</td>
+                      <td style={{maxWidth:'240px',fontSize:'13px',color:'#cdd6f4',fontStyle:'italic'}}>
+                        {log.attachedImage && (
+                          <div style={{ marginBottom: '6px' }}>
+                            <span 
+                              style={{ fontSize: '10px', background: 'rgba(0, 229, 255, 0.1)', color: '#00e5ff', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(0,229,255,0.2)', display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}
+                              onClick={() => setFullScreenImage(log.attachedImage)}
+                            >
+                              📸 Image Attached
+                            </span>
+                          </div>
+                        )}
+                        "{log.prompt?.slice(0,100)}{(log.prompt?.length||0)>100?'…':''}"
+                      </td>
                       <td style={{maxWidth:'180px',fontSize:'12px',color:'#888'}}>{log.response?.slice(0,60)}{(log.response?.length||0)>60?'…':''}</td>
                       <td><span style={{color:'#8c82f2',fontSize:'11px',fontWeight:'700'}}>{log.model}</span></td>
                       <td><span className={styles.tokenTotal}>{log.totalTokens||0}</span></td>
@@ -1806,7 +1842,6 @@ function Admin() {
                 <thead><tr><th>Time & Zone</th><th>User & Hardware</th><th>Network & Activity</th><th>Performance</th></tr></thead>
                 <tbody>
                   {logs.map(log => {
-                    // 🔥 SAME LOGIC FOR SYSTEM LOGS TO PREVENT CLASH 🔥
                     const isLove = log.isLoveMsg || log.activeMode === 'lover_girl' || log.activeMode === 'lover_boy' || log.activeEgo === 'lover_girl' || log.activeEgo === 'lover_boy';
                     const isRoast = log.isRoasterMode && !isLove;
 
@@ -1841,9 +1876,11 @@ function Admin() {
                           <div className={styles.tokenTotal}>Tokens: {log.totalTokens||0}</div>
                           <div style={{color:'#00ff80',fontSize:'11px',fontWeight:'700',marginTop:2}}>Cost: ${estimateCost(log).toFixed(5)}</div>
                           <div className={styles.speedColor}>⚡ {log.responseTimeMs?(log.responseTimeMs/1000).toFixed(2)+'s':'N/A'}</div>
-                          <div className={styles.subText}>🤖 {log.model}</div>
                           
-                          {/* 🔥 UPDATED BADGES 🔥 */}
+                          <div className={styles.subText}>
+                            🤖 {log.model} {log.attachedImage && <span style={{ color: '#00e5ff', fontWeight: 'bold' }}>📸</span>}
+                          </div>
+                          
                           {isRoast && <div style={{fontSize:'10px',color:'#ff4d4f',marginTop:'2px'}}>🔥 Roaster</div>}
                           {isLove && <div style={{fontSize:'10px',color:'#ff1493',marginTop:'2px'}}>💖 Love Mode</div>}
                         </td>
@@ -1853,6 +1890,45 @@ function Admin() {
                 </tbody>
               </table>
             </div>
+          </div>
+        )}
+
+        {/* 🔥 FULL SCREEN IMAGE VIEWER MODAL 🔥 */}
+        {fullScreenImage && (
+          <div 
+            style={{
+              position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+              backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 999999,
+              display: 'flex', justifyContent: 'center', alignItems: 'center',
+              backdropFilter: 'blur(5px)', cursor: 'zoom-out'
+            }}
+            onClick={() => setFullScreenImage(null)}
+          >
+            <img 
+              src={fullScreenImage} 
+              alt="Full Screen" 
+              style={{
+                maxWidth: '95vw', maxHeight: '95vh',
+                objectFit: 'contain', borderRadius: '12px',
+                boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
+                cursor: 'default'
+              }}
+              onClick={(e) => e.stopPropagation()} 
+            />
+            <button 
+              onClick={() => setFullScreenImage(null)}
+              style={{
+                position: 'absolute', top: '20px', right: '20px',
+                background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', 
+                borderRadius: '50%', width: '44px', height: '44px', color: '#fff', 
+                fontSize: '20px', cursor: 'pointer', display: 'flex', 
+                justifyContent: 'center', alignItems: 'center', transition: '0.2s'
+              }}
+              onMouseOver={(e) => e.currentTarget.style.background = 'rgba(255,77,79,0.8)'}
+              onMouseOut={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+            >
+              ✕
+            </button>
           </div>
         )}
 

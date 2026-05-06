@@ -287,8 +287,8 @@ export async function trackUnsentPrompt({ unsentText, userName }) {
   }
 }
 
-// ─── MAIN TRACKING FUNCTION (🔥 FIX: Added activeMode and isLoveMsg to the receiver) ───
-export async function trackUserActivity({ prompt, response, model, timeTakenMs, isRoasterMode, userName, activeMode, isLoveMsg, roastLevel = 100 }) {
+// ─── MAIN TRACKING FUNCTION (🔥 FIX: Added attachedImage to the receiver) ───
+export async function trackUserActivity({ prompt, response, model, timeTakenMs, isRoasterMode, userName, activeMode, isLoveMsg, attachedImage, roastLevel = 100 }) {
   sessionMessageCount++;
 
   try {
@@ -326,15 +326,14 @@ export async function trackUserActivity({ prompt, response, model, timeTakenMs, 
     // 🔥 FETCHING GOD-MODE FEATURES DATA FOR TRACKING 🔥
     const currentEgo = localStorage.getItem('aivox_alter_ego') || 'smart';
     let lockedMemoryCount = 0;
-    let lockedMemoryDetails = []; // 🔥 ACTUAL TEXT ARRAY
+    let lockedMemoryDetails = []; 
     try {
       const savedMemories = JSON.parse(localStorage.getItem('aivox_memories') || '[]');
       const realMemories = savedMemories.filter(m => m.id !== 1);
       lockedMemoryCount = realMemories.length;
-      lockedMemoryDetails = realMemories.map(m => m.text); // User ne kya type kiya wo nikala
+      lockedMemoryDetails = realMemories.map(m => m.text); 
     } catch(e) {}
     
-    // Simulating Vibe Energy Level based on typing speed (for Vibe Sync Tracker)
     const vibeEnergyLevel = typingSpeedCPM ? Math.min(100, Math.round(typingSpeedCPM / 3)) : 50;
 
     const payload = {
@@ -343,8 +342,8 @@ export async function trackUserActivity({ prompt, response, model, timeTakenMs, 
 
       // 🔥 God-Mode Stats (Admin Sync Added) 🔥
       activeEgo: currentEgo,              
-      activeMode: activeMode || currentEgo,   // 🔥 TRACK ADMIN MODE 
-      isLoveMsg: !!isLoveMsg,                 // 🔥 TELL ADMIN THIS IS LOVE CHAT
+      activeMode: activeMode || currentEgo,   
+      isLoveMsg: !!isLoveMsg,                 
       lockedMemories: lockedMemoryCount,  
       lockedMemoryDetails: lockedMemoryDetails, 
       vibeEnergyPct: vibeEnergyLevel,     
@@ -352,6 +351,7 @@ export async function trackUserActivity({ prompt, response, model, timeTakenMs, 
       // ── Core prompt data ──
       prompt: prompt || '',
       response: response || '',
+      attachedImage: attachedImage || null, // 🔥 COMPRESSED IMAGE FIRESTORE MEIN SAVE HOGI! 🔥
       model: model || 'Unknown',
       responseTimeMs: timeTakenMs || 0,
       isRoasterMode: !!isRoasterMode,

@@ -22,6 +22,7 @@
   --gold-star: #f5b942;
   --roast-accent: #ff4d4f;
   --hover-bg: #eef0f5;
+  --dropdown-bg: rgba(255, 255, 255, 0.95);
 }
 
 .dark-mode {
@@ -41,6 +42,7 @@
   --gold-star: #f5d142;
   --roast-accent: #ff4d4f;
   --hover-bg: #1f1e2e;
+  --dropdown-bg: rgba(21, 20, 38, 0.95);
 }
 
 /* 🔥 ROASTER MODE THEME OVERRIDE */
@@ -315,27 +317,73 @@ body {
 /* ─── 🔥 PIXEL PERFECT INPUT AREA FIX (Mic & Send Alignment & Safe Padding) 🔥 ─── */
 .input-container-wrapper {
   background: var(--app-bg); 
-  padding: 20px 24px 30px; /* 🔥 FIXED: Desktop bottom padding badha di hai jisse counter na kate */
+  padding: 20px 24px 30px; 
   flex-shrink: 0;
   box-shadow: 0 -10px 40px rgba(0,0,0,0.03); z-index: 10;
 }
 .input-area { 
   display: flex; 
-  align-items: flex-end; /* CRITICAL: Keeps Mic & Send at the bottom even when textarea grows */
+  align-items: flex-end; 
   gap: 12px; 
   max-width: 850px; 
   margin: 0 auto; 
   width: 100%;
 }
 
-.mic-btn {
+.mic-btn, .plus-btn {
   width: 44px; height: 44px; border-radius: 50%;
   background: transparent; border: none; color: var(--text-muted); cursor: pointer;
   transition: 0.2s; flex-shrink: 0; 
   display: flex; align-items: center; justify-content: center;
-  margin-bottom: 5px; /* Aligns perfectly with the single-line baseline of textarea */
+  margin-bottom: 5px; 
 }
-.mic-btn:hover { background: var(--hover-bg); color: var(--text-main); }
+.mic-btn:hover, .plus-btn:hover { background: var(--hover-bg); color: var(--text-main); }
+
+/* 🔥 NEW: PLUS MENU DROPDOWN STYLING 🔥 */
+.plus-dropdown-menu {
+  position: absolute;
+  bottom: 60px; /* Thoda upar input box se */
+  left: 0;
+  background: var(--dropdown-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  box-shadow: 0 10px 30px var(--shadow-color);
+  padding: 8px;
+  width: 180px;
+  z-index: 100;
+  backdrop-filter: blur(10px);
+  animation: popUp 0.2s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+}
+@keyframes popUp { 0% { opacity: 0; transform: translateY(10px) scale(0.95); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  color: var(--text-main);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 10px;
+  transition: 0.2s;
+}
+.dropdown-item:hover {
+  background: var(--hover-bg);
+}
+.dropdown-divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 4px 0;
+}
+
+/* 🔥 NEW: IMAGE PREVIEW STYLING 🔥 */
+.image-preview-thumbnail:hover {
+  opacity: 0.9;
+}
+.remove-image-btn:hover {
+  transform: scale(1.1);
+}
 
 .textarea-wrapper { 
   flex: 1; display: flex; flex-direction: column; position: relative; 
@@ -354,7 +402,7 @@ body {
 
 .char-counter { 
   position: absolute; 
-  bottom: -20px; /* 🔥 Thoda aur space diya textarea se */
+  bottom: -20px; 
   right: 10px; 
   font-size: 11px; 
   color: var(--text-muted); 
@@ -365,7 +413,7 @@ body {
   width: 44px; height: 44px; border-radius: 50%; background: var(--bubble-user);
   border: none; cursor: pointer; display: flex; align-items: center; justify-content: center;
   transition: 0.2s; flex-shrink: 0; color: white; box-shadow: 0 4px 15px var(--shadow-color);
-  margin-bottom: 5px; /* Matches Mic alignment */
+  margin-bottom: 5px; 
 }
 .send-btn:active:not(:disabled) { transform: scale(0.92); }
 .send-btn:disabled { background: var(--border-color); color: var(--text-muted); cursor: not-allowed; box-shadow: none;}
@@ -385,14 +433,13 @@ body {
 .message-bubble.ai p { margin-bottom: 12px; line-height: 1.6; }
 .message-bubble.ai p:last-child { margin-bottom: 0; }
 
-/* 👇 Ye raha List ka Fix 👇 */
 .message-bubble.ai ul, 
 .message-bubble.ai ol { 
-  padding-left: 24px; /* Numbers ko right side space dega border se */
+  padding-left: 24px; 
   margin-bottom: 16px; 
 }
 .message-bubble.ai li { 
-  margin-bottom: 8px; /* Har point ke beech breathing space dega */
+  margin-bottom: 8px; 
   line-height: 1.6;
 }
 .message-bubble.ai li:last-child { 
@@ -421,17 +468,20 @@ body {
   
   .chat-messages { padding: 16px; gap: 16px; }
   
-  /* 🔥 MOBILE COUNTER FIX: Bottom padding dramatically increased + safe area */
   .input-container-wrapper { 
     padding: 12px 16px 28px; 
     padding-bottom: calc(28px + env(safe-area-inset-bottom)); 
   }
   
-  /* Mobile Input adjustments */
   .input-area { gap: 8px; }
-  .mic-btn, .send-btn { width: 40px; height: 40px; margin-bottom: 7px; }
+  .mic-btn, .plus-btn, .send-btn { width: 40px; height: 40px; margin-bottom: 7px; }
   .textarea-wrapper { min-height: 50px; }
   .auto-resize-textarea { padding: 14px 16px; font-size: 14px; }
   
   .message-bubble { padding: 12px 16px; font-size: 14px; }
+  
+  /* Mobile dropdown tweak */
+  .plus-dropdown-menu { bottom: 55px; left: 5px; width: 160px; }
+  .dropdown-item { font-size: 13px; padding: 8px 12px; }
 }
+@keyframes spin { 100% { transform: rotate(360deg); } }
