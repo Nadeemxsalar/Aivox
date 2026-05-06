@@ -20,12 +20,13 @@ function App() {
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [toastMsg, setToastMsg] = useState(''); 
   
-  // 🔥 ADVANCED IMAGE UPLOAD STATES 🔥
-  const [selectedImageBase64, setSelectedImageBase64] = useState(null); // Compressed data
-  const [imagePreviewUrl, setImagePreviewUrl] = useState(null); // Local Preview URL
-  const [isCompressing, setIsCompressing] = useState(false); // Loading state
+  // 🔥 ADVANCED IMAGE UPLOAD & PLUS MENU STATES 🔥
+  const [selectedImageBase64, setSelectedImageBase64] = useState(null); 
+  const [imagePreviewUrl, setImagePreviewUrl] = useState(null); 
+  const [isCompressing, setIsCompressing] = useState(false); 
   const [showPlusMenu, setShowPlusMenu] = useState(false);
   const fileInputRef = useRef(null);
+  const plusMenuRef = useRef(null); 
 
   const [showClearModal, setShowClearModal] = useState(false);
   
@@ -100,24 +101,39 @@ function App() {
     return unsubscribe;
   }, []);
 
+  // 🔥 CLICK OUTSIDE LISTENER TO CLOSE MENU 🔥
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (plusMenuRef.current && !plusMenuRef.current.contains(event.target)) {
+        setShowPlusMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // 🔥 HELPER TO SWITCH CHAT HISTORY PROPERLY 🔥
+  const loadChatHistory = (newEgo) => {
+    const checkLoveMode = newEgo === 'lover_girl' || newEgo === 'lover_boy';
+    const storageKey = checkLoveMode ? 'aivox_love_chat_history' : 'aivox_chat_history';
+    const savedChats = localStorage.getItem(storageKey);
+    
+    if (savedChats) {
+      setMessages(JSON.parse(savedChats));
+    } else {
+      const defaultGreeting = checkLoveMode 
+        ? (newEgo === 'lover_girl' ? 'Kaise ho babu? ❤️' : 'Kaisi ho meri jaan? ❤️') 
+        : 'Hello! Main **Aivox** hoon. Main aapki kya madad kar sakta hoon? ✨';
+      setMessages([{ id: Date.now(), role: 'ai', text: defaultGreeting, image: null, time: getCurrentTime(), isBookmarked: false }]);
+    }
+  };
+
   useEffect(() => {
     const handleStorageChange = () => {
       const savedEgo = localStorage.getItem('aivox_alter_ego') || 'smart';
       setActiveEgo(savedEgo);
       setIsRoasterMode(savedEgo === 'savage');
-      
-      const checkLoveMode = savedEgo === 'lover_girl' || savedEgo === 'lover_boy';
-      const storageKey = checkLoveMode ? 'aivox_love_chat_history' : 'aivox_chat_history';
-      const savedChats = localStorage.getItem(storageKey);
-      
-      if (savedChats) {
-        setMessages(JSON.parse(savedChats));
-      } else {
-        const defaultGreeting = checkLoveMode 
-          ? (savedEgo === 'lover_girl' ? 'Kaise ho babu? ❤️' : 'Kaisi ho meri jaan? ❤️') 
-          : 'Hello! Main **Aivox** hoon. Main aapki kya madad kar sakta hoon? ✨';
-        setMessages([{ id: Date.now(), role: 'ai', text: defaultGreeting, image: null, time: getCurrentTime(), isBookmarked: false }]);
-      }
+      loadChatHistory(savedEgo);
     };
 
     window.addEventListener('storage', handleStorageChange);
@@ -167,7 +183,6 @@ function App() {
           const ctx = canvas.getContext('2d');
           ctx.drawImage(img, 0, 0, width, height);
           
-          // Highly optimized JPEG to handle 20MB+ files smoothly
           const dataUrl = canvas.toDataURL('image/jpeg', 0.5);
           const base64Data = dataUrl.split(',')[1];
           
@@ -183,29 +198,25 @@ function App() {
     });
   };
 
-  // 🔥 HANDLE IMAGE SELECTION & BACKGROUND COMPRESSION 🔥
   const handleImageSelect = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
     setShowPlusMenu(false);
-    
-    // Show Preview instantly so user knows it's working
     setImagePreviewUrl(URL.createObjectURL(file));
-    setIsCompressing(true); // Start Loader
+    setIsCompressing(true); 
 
     try {
       const compressedPart = await fileToGenerativePart(file);
-      setSelectedImageBase64(compressedPart); // Ready to send!
+      setSelectedImageBase64(compressedPart); 
     } catch (error) {
       console.error("Compression Failed", error);
       showToast("Photo compress nahi ho paayi! Dobara try karein.");
       setImagePreviewUrl(null);
     } finally {
-      setIsCompressing(false); // Stop Loader, Button becomes active
+      setIsCompressing(false); 
     }
     
-    // Reset file input so same file can be selected again if needed
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -230,7 +241,6 @@ function App() {
     if (e) e.preventDefault();
     const textToProcess = customPrompt || prompt.trim();
     
-    // 🚨 Block Send if Text & Image are empty, OR if App is Loading, OR if Compressing is ongoing
     if ((!textToProcess && !selectedImageBase64) || loading || isCompressing) return;
 
     const imagePart = selectedImageBase64; 
@@ -463,7 +473,18 @@ function App() {
     setActiveEgo(newEgo);
     setIsRoasterMode(newEgo === 'savage');
     localStorage.setItem('aivox_alter_ego', newEgo);
+    loadChatHistory(newEgo);
     showToast(newEgo === 'savage' ? "Savage Mode Activated 🔥" : "Normal Mode Activated ✨");
+  };
+
+  // 🔥 DIRECT NORMAL MODE FUNCTION 🔥
+  const activateNormalMode = () => {
+    setActiveEgo('smart');
+    setIsRoasterMode(false);
+    localStorage.setItem('aivox_alter_ego', 'smart');
+    loadChatHistory('smart');
+    showToast("Normal Mode Activated ✨");
+    setShowPlusMenu(false);
   };
 
   const filteredMessages = messages.filter(msg => msg.text.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -646,7 +667,45 @@ function App() {
                         </div>
                       )}
 
-                      {msg.role === 'ai' ? <ReactMarkdown>{msg.text}</ReactMarkdown> : <span style={{whiteSpace: 'pre-wrap'}}>{msg.text}</span>}
+                      {/* 🔥 PREMIUM CODE COPY FEATURE APPLIED HERE 🔥 */}
+                      {msg.role === 'ai' ? (
+                        <ReactMarkdown
+                          components={{
+                            pre({node, children, ...props}) {
+                              // Deep extract text to ensure clean copying of code
+                              const extractText = (child) => {
+                                if (typeof child === 'string') return child;
+                                if (Array.isArray(child)) return child.map(extractText).join('');
+                                if (child && child.props && child.props.children) return extractText(child.props.children);
+                                return '';
+                              };
+                              const codeString = extractText(children);
+                              
+                              return (
+                                <div style={{ background: '#0b0a14', borderRadius: '12px', border: '1px solid #2a2a40', overflow: 'hidden', margin: '14px 0', boxShadow: '0 4px 15px rgba(0,0,0,0.2)' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#151426', padding: '8px 14px', borderBottom: '1px solid #2a2a40' }}>
+                                    <span style={{ fontSize: '11px', color: '#8a8d9e', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Terminal / Code</span>
+                                    <button 
+                                      onClick={() => { navigator.clipboard.writeText(codeString); showToast("Code Copied! 📋"); }}
+                                      style={{ background: 'transparent', border: 'none', color: '#8c82f2', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 'bold', padding: 0 }}
+                                    >
+                                      <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                      Copy
+                                    </button>
+                                  </div>
+                                  <pre {...props} style={{ margin: 0, padding: '16px', background: 'transparent', overflowX: 'auto', fontSize: '13px', color: '#cdd6f4' }}>
+                                    {children}
+                                  </pre>
+                                </div>
+                              );
+                            }
+                          }}
+                        >
+                          {msg.text}
+                        </ReactMarkdown>
+                      ) : (
+                        <span style={{whiteSpace: 'pre-wrap'}}>{msg.text}</span>
+                      )}
                     </div>
                     
                     <div className={`message-meta ${msg.role}`}>
@@ -676,7 +735,7 @@ function App() {
           <div className="input-container-wrapper">
             <form onSubmit={handleGenerate} className={`input-area ${isLoveMode ? 'love-input-area' : ''}`}>
               
-              <div style={{ position: 'relative' }}>
+              <div style={{ position: 'relative' }} ref={plusMenuRef}>
                 <button 
                   type="button" 
                   onClick={() => setShowPlusMenu(!showPlusMenu)} 
@@ -701,13 +760,9 @@ function App() {
                       Voice Input
                     </div>
                     <div className="dropdown-divider"></div>
-                    <div className="dropdown-item" onClick={() => { toggleSidebarRoaster(); setShowPlusMenu(false); }}>
-                      {activeEgo === 'savage' ? (
-                        <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                      ) : (
-                        <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                      )}
-                      {activeEgo === 'savage' ? 'Normal Mode' : 'Roaster Mode'}
+                    <div className="dropdown-item" onClick={activateNormalMode}>
+                      <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                      Normal Mode
                     </div>
                   </div>
                 )}
@@ -723,7 +778,6 @@ function App() {
               
               <div className="textarea-wrapper" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                 
-                {/* 🔥 IMAGE PREVIEW BOX WITH LOADING SPINNER 🔥 */}
                 {imagePreviewUrl && (
                   <div className="image-preview-container" style={{ padding: '12px 20px 0 20px' }}>
                     <div style={{ position: 'relative', display: 'inline-block' }}>
@@ -738,12 +792,11 @@ function App() {
                           borderRadius: '8px', 
                           border: '1px solid var(--border-color)', 
                           objectFit: 'cover',
-                          opacity: isCompressing ? 0.4 : 1, // Dim while compressing
+                          opacity: isCompressing ? 0.4 : 1,
                           transition: 'opacity 0.3s'
                         }} 
                       />
                       
-                      {/* Show Spinner while compressing */}
                       {isCompressing && (
                         <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}>
                            <svg className="spinner-icon" viewBox="0 0 50 50" style={{ width: '24px', height: '24px', animation: 'spin 1s linear infinite' }}>
@@ -752,7 +805,6 @@ function App() {
                         </div>
                       )}
 
-                      {/* Show Cross button only when compression is done */}
                       {!isCompressing && (
                         <button 
                           type="button" 
@@ -781,7 +833,6 @@ function App() {
                 <div className="char-counter">{prompt.length} / 500</div>
               </div>
               
-              {/* 🔥 SEND BUTTON DISABLED DURING COMPRESSION 🔥 */}
               <button 
                 type="submit" 
                 disabled={(!prompt.trim() && !selectedImageBase64) || loading || isCompressing} 
