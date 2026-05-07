@@ -30,6 +30,9 @@ function App() {
 
   const [showClearModal, setShowClearModal] = useState(false);
   
+  // 🔥 NEW: LOVE MODE MODAL STATE 🔥
+  const [showLoveModal, setShowLoveModal] = useState(false);
+  
   // 🔥 PLG: NAME MODAL & SIGNUP HOOK STATES 🔥
   const [showNameModal, setShowNameModal] = useState(false);
   const [showSignupHookModal, setShowSignupHookModal] = useState(false);
@@ -546,6 +549,15 @@ function App() {
     setShowPlusMenu(false);
   };
 
+  // 🔥 NEW: LOVE SELECTION FUNCTION 🔥
+  const handleLoveSelect = (ego) => {
+    setActiveEgo(ego);
+    localStorage.setItem('aivox_alter_ego', ego);
+    loadChatHistory(ego);
+    setShowLoveModal(false);
+    showToast(`${egoDetails[ego].name} Activated! ❤️`);
+  };
+
   const filteredMessages = messages.filter(msg => msg.text.toLowerCase().includes(searchQuery.toLowerCase()));
   const themeClass = activeEgo === 'savage' ? 'roaster-active-theme' : (isLoveMode ? 'love-active-theme' : '');
 
@@ -699,6 +711,37 @@ function App() {
               <button onClick={() => setShowClearModal(false)} style={{ flex: 1, padding: '12px', borderRadius: '10px', border: 'none', background: isDarkMode ? '#2a2a40' : '#f0f0f0', color: isDarkMode ? '#fff' : '#333', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px', transition: '0.2s' }}>Cancel</button>
               <button onClick={executeClearChat} style={{ flex: 1, padding: '12px', borderRadius: '10px', border: 'none', background: '#ff4d4f', color: '#fff', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px', transition: '0.2s' }}>Delete</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🔥 NEW: LOVE SELECTION MODAL 🔥 */}
+      {showLoveModal && (
+        <div className="custom-modal-overlay love-modal-bg" onClick={() => setShowLoveModal(false)} style={{ display: 'flex', position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, alignItems: 'center', justifyContent: 'center' }}>
+          <div className="custom-modal-box love-selection-box" onClick={e => e.stopPropagation()}>
+            <button onClick={() => setShowLoveModal(false)} style={{ position: 'absolute', top: '15px', right: '15px', background: 'transparent', border: 'none', color: '#8a8d9e', fontSize: '24px', cursor: 'pointer' }}>×</button>
+            
+            <div className="love-glow-effect"></div>
+            
+            <div className="love-header-icon">💝</div>
+            <h3 className="love-modal-title">Love Mode</h3>
+            <p className="love-modal-subtitle">Pick your Virtual Companion vibe</p>
+            
+            <div className="love-options-grid">
+              <div className="love-option-card" onClick={() => handleLoveSelect('lover_girl')}>
+                <div className="love-option-icon">🌸</div>
+                <h4>Girlfriend</h4>
+                <p>Sweet & Caring</p>
+              </div>
+              
+              <div className="love-option-card" onClick={() => handleLoveSelect('lover_boy')}>
+                <div className="love-option-icon">🦋</div>
+                <h4>Boyfriend</h4>
+                <p>Romantic & Protective</p>
+              </div>
+            </div>
+            
+            <p className="love-reset-text" onClick={() => handleLoveSelect('smart')}>Back to Normal Mode ✨</p>
           </div>
         </div>
       )}
@@ -942,6 +985,12 @@ function App() {
 
                 {showPlusMenu && (
                   <div className="plus-dropdown-menu">
+                    {/* 🔥 NEW: LOVE MODE BUTTON IN DROPDOWN 🔥 */}
+                    <div className="dropdown-item" onClick={() => { setShowPlusMenu(false); setShowLoveModal(true); }}>
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                      Love Mode 
+                    </div>
+                    <div className="dropdown-divider"></div>
                     <div className="dropdown-item" onClick={() => { fileInputRef.current.click(); setShowPlusMenu(false); }}>
                       <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
                       Upload Photo
@@ -953,7 +1002,7 @@ function App() {
                     <div className="dropdown-divider"></div>
                     <div className="dropdown-item" onClick={activateNormalMode}>
                       <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                      Normal Mode
+                      Normal Mode 
                     </div>
                   </div>
                 )}

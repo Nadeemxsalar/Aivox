@@ -595,3 +595,167 @@ body {
   0%, 100% { opacity: 0.6; transform: scale(0.95); }
   50% { opacity: 1; transform: scale(1.05); }
 }
+
+
+/* =========================================
+   💖 ULTRA-PREMIUM LOVE SELECTION MODAL 💖
+   ========================================= */
+
+/* Dark, Deep Glass Overlay */
+.love-modal-bg {
+  background: rgba(10, 5, 15, 0.85) !important;
+  backdrop-filter: blur(16px) !important;
+  animation: ultraFadeIn 0.4s ease-out forwards;
+}
+
+/* The Main Modal - Neon Glassmorphism */
+.love-selection-box {
+  background: linear-gradient(145deg, #1a0b12 0%, #0b0a14 100%) !important;
+  border: 1px solid rgba(255, 77, 133, 0.3) !important;
+  box-shadow: 0 20px 60px rgba(255, 77, 133, 0.2) !important;
+  padding: 40px 24px 30px !important;
+  width: 90% !important;
+  max-width: 380px !important;
+  border-radius: 28px !important;
+  text-align: center !important;
+  position: relative !important;
+  animation: ultraPopUp 0.5s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards;
+}
+
+/* Dynamic Ambient Glow */
+.love-glow-effect {
+  position: absolute;
+  top: -50px; left: 50%;
+  transform: translateX(-50%);
+  width: 150px; height: 150px;
+  background: #ff4d85;
+  filter: blur(60px);
+  opacity: 0.25;
+  pointer-events: none;
+  animation: pulseAmbientGlow 3s infinite alternate;
+}
+
+/* Floating Heart Icon */
+.love-header-icon {
+  font-size: 46px; 
+  margin-bottom: 10px;
+  position: relative;
+  animation: floatHeartIcon 3s ease-in-out infinite;
+  filter: drop-shadow(0 8px 12px rgba(255, 77, 133, 0.4));
+}
+
+/* Premium Typography */
+.love-modal-title { 
+  color: #ffffff; 
+  font-size: 24px; 
+  font-weight: 800; 
+  letter-spacing: -0.5px;
+  margin-bottom: 5px; 
+  position: relative;
+}
+
+.love-modal-subtitle { 
+  color: #8a8d9e; 
+  font-size: 14px; 
+  font-weight: 500;
+  margin-bottom: 25px; 
+  position: relative;
+}
+
+/* Layout for Cards */
+.love-options-grid {
+  display: grid; 
+  grid-template-columns: 1fr 1fr; 
+  gap: 15px; 
+  margin-bottom: 25px;
+  position: relative;
+}
+
+/* Futuristic Option Cards */
+.love-option-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 77, 133, 0.1);
+  padding: 24px 12px; 
+  border-radius: 20px;
+  cursor: pointer; 
+  transition: all 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Hover State */
+.love-option-card:hover {
+  background: linear-gradient(145deg, rgba(255, 77, 133, 0.15), rgba(255, 117, 140, 0.05));
+  border-color: rgba(255, 77, 133, 0.8);
+  box-shadow: 0 10px 25px rgba(255, 77, 133, 0.2);
+  transform: translateY(-6px);
+}
+
+/* Card Icons & Text */
+.love-option-icon { 
+  font-size: 32px; 
+  margin-bottom: 10px; 
+  transition: transform 0.3s ease;
+}
+.love-option-card:hover .love-option-icon {
+  transform: scale(1.15);
+}
+
+.love-option-card h4 { 
+  color: #ffffff; 
+  font-size: 15px; 
+  font-weight: 700;
+  margin-bottom: 4px; 
+}
+.love-option-card p { 
+  color: #8a8d9e; 
+  font-size: 12px; 
+  margin: 0;
+  transition: color 0.3s;
+}
+.love-option-card:hover p { color: #ffffff; }
+
+/* ─── 🔥 BACK TO NORMAL MODE BUTTON 🔥 ─── */
+.love-reset-text {
+  font-size: 14px; 
+  color: #8c82f2; 
+  cursor: pointer; 
+  font-weight: 700; 
+  transition: all 0.3s ease;
+  display: inline-block;
+  padding: 10px 24px;
+  border-radius: 20px;
+  background: rgba(140, 130, 242, 0.08);
+  border: 1px solid rgba(140, 130, 242, 0.2);
+  margin-top: 5px;
+}
+
+.love-reset-text:hover { 
+  color: #ffffff; 
+  background: rgba(140, 130, 242, 0.2);
+  border-color: #8c82f2;
+  box-shadow: 0 5px 15px rgba(140, 130, 242, 0.3);
+  transform: translateY(-2px);
+}
+
+/* ─── ANIMATIONS ─── */
+@keyframes ultraFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes ultraPopUp {
+  0% { opacity: 0; transform: scale(0.9) translateY(20px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes pulseAmbientGlow {
+  0% { transform: translateX(-50%) scale(1); opacity: 0.2; }
+  100% { transform: translateX(-50%) scale(1.15); opacity: 0.35; }
+}
+
+@keyframes floatHeartIcon {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
