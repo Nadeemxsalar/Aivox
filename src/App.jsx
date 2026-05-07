@@ -219,6 +219,36 @@ function App() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
+  // 🔥 NEW FEATURE: IMAGE PASTE LOGIC 🔥
+  const handlePaste = async (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') !== -1) {
+        e.preventDefault(); // Default text paste ko roko
+        const file = items[i].getAsFile();
+        if (!file) continue;
+
+        setShowPlusMenu(false);
+        setImagePreviewUrl(URL.createObjectURL(file));
+        setIsCompressing(true);
+
+        try {
+          const compressedPart = await fileToGenerativePart(file);
+          setSelectedImageBase64(compressedPart);
+        } catch (error) {
+          console.error("Paste Compression Failed", error);
+          showToast("Photo paste nahi ho paayi! Dobara try karein.");
+          setImagePreviewUrl(null);
+        } finally {
+          setIsCompressing(false);
+        }
+        break; // Ek baar me ek hi image process karo
+      }
+    }
+  };
+
   const removeSelectedImage = () => {
     setSelectedImageBase64(null);
     setImagePreviewUrl(null);
@@ -525,7 +555,6 @@ function App() {
     <div className={`app-container ${isDarkMode ? 'dark-mode' : 'light-mode'} ${themeClass}`}>
       {toastMsg && <div className="custom-toast">{toastMsg}</div>}
 
-      {/* 🔥 THE NAME MODAL (UNCHANGED) 🔥 */}
       {showNameModal && (
         <div className="custom-modal-overlay" style={{ display: 'flex', position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.75)', zIndex: 9999, alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(12px)' }}>
           <div className="custom-modal-box" style={{ background: isDarkMode ? 'linear-gradient(145deg, #151426 0%, #0b0a14 100%)' : '#ffffff', padding: '40px 30px', borderRadius: '24px', border: `1px solid ${isLoveMode ? 'rgba(255,77,133,0.4)' : 'rgba(140,130,242,0.4)'}`, width: '85%', maxWidth: '380px', textAlign: 'center', boxShadow: `0 20px 60px ${isLoveMode ? 'rgba(255,77,133,0.15)' : 'rgba(140,130,242,0.15)'}`, position: 'relative', overflow: 'hidden', animation: 'scaleIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards' }}>
@@ -597,7 +626,6 @@ function App() {
         </div>
       )}
 
-      {/* 🔥 THE PREMIUM "TAJ / CROWN" 5-MESSAGE LIMIT HOOK MODAL 🔥 */}
       {showSignupHookModal && (
         <div className="custom-modal-overlay" style={{ display: 'flex', position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 9999, alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(15px)' }}>
           <div className="custom-modal-box" style={{ background: isDarkMode ? 'linear-gradient(145deg, #1f1b0a 0%, #0b0a14 100%)' : '#ffffff', padding: '40px 30px', borderRadius: '24px', border: '1px solid rgba(245, 185, 66, 0.4)', width: '85%', maxWidth: '400px', textAlign: 'center', boxShadow: '0 20px 60px rgba(245, 185, 66, 0.15)', position: 'relative', overflow: 'hidden', animation: 'scaleIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards' }}>
@@ -608,7 +636,6 @@ function App() {
 
             <div style={{ position: 'absolute', top: '-50px', left: '50%', transform: 'translateX(-50%)', width: '150px', height: '150px', background: '#f5b942', filter: 'blur(70px)', opacity: 0.25, pointerEvents: 'none' }}></div>
 
-            {/* 🔥 ANIMATED PREMIUM GOLD CROWN (TAJ) SVG 🔥 */}
             <div style={{ position: 'relative', width: '80px', height: '80px', margin: '0 auto 20px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <svg viewBox="0 0 100 100" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}>
                  <circle cx="50" cy="50" r="40" fill="none" stroke="#f5b942" strokeWidth="2" strokeDasharray="10 10" opacity="0.5">
@@ -619,7 +646,6 @@ function App() {
                    <animate attributeName="opacity" values="0.5; 1; 0.5" dur="2s" repeatCount="indefinite" />
                  </circle>
               </svg>
-              {/* Premium Crown SVG */}
               <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="#f5b942" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'relative', zIndex: 2 }}>
                 <polygon points="2 18 22 18 20 5 16 12 12 2 8 12 4 5 2 18"></polygon>
                 <path d="M2 22h20"></path>
@@ -977,6 +1003,7 @@ function App() {
                   onChange={handleInputResize} 
                   onFocus={onPromptStart} 
                   onKeyDown={(e) => { onPromptKey(); handleKeyDown(e); }} 
+                  onPaste={handlePaste} 
                   placeholder={egoDetails[activeEgo] ? `Message ${egoDetails[activeEgo].shortName}...` : "Message Aivox..."}
                   disabled={loading || isCompressing} 
                   rows={1} 
