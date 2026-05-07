@@ -549,7 +549,20 @@ function App() {
   const filteredMessages = messages.filter(msg => msg.text.toLowerCase().includes(searchQuery.toLowerCase()));
   const themeClass = activeEgo === 'savage' ? 'roaster-active-theme' : (isLoveMode ? 'love-active-theme' : '');
 
-  if (isAuthChecking) return <div className="app-container dark-mode" style={{display:'flex', justifyContent:'center', alignItems:'center', height:'100vh', color:'#8c82f2'}}>Loading...</div>;
+  // 🔥 PREMIUM ANIMATED LOADER INSTALLED HERE 🔥
+  if (isAuthChecking) {
+    return (
+      <div className="premium-loader-container">
+        <div className="premium-loader">
+          <div className="loader-ring"></div>
+          <div className="loader-ring"></div>
+          <div className="loader-ring"></div>
+          <img src="/logo.svg" alt="Aivox Loading" className="loader-logo" />
+        </div>
+        <h2 className="loader-text">Waking up Aivox<span>...</span></h2>
+      </div>
+    );
+  }
 
   return (
     <div className={`app-container ${isDarkMode ? 'dark-mode' : 'light-mode'} ${themeClass}`}>
