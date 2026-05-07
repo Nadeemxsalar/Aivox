@@ -30,6 +30,11 @@ function App() {
 
   const [showClearModal, setShowClearModal] = useState(false);
   
+  // 🔥 PLG: NAME MODAL & SIGNUP HOOK STATES 🔥
+  const [showNameModal, setShowNameModal] = useState(false);
+  const [showSignupHookModal, setShowSignupHookModal] = useState(false);
+  const [tempName, setTempName] = useState('');
+  
   const [activeEgo, setActiveEgo] = useState(localStorage.getItem('aivox_alter_ego') || 'smart');
   const [isRoasterMode, setIsRoasterMode] = useState(activeEgo === 'savage'); 
   const isLoveMode = activeEgo === 'lover_girl' || activeEgo === 'lover_boy';
@@ -92,16 +97,12 @@ function App() {
         setAuthUser(currentUser);
       } else {
         setAuthUser(null);
-        if (!localStorage.getItem('aivox_guest_name')) {
-          window.location.href = '/auth';
-        }
       }
       setIsAuthChecking(false);
     });
     return unsubscribe;
   }, []);
 
-  // 🔥 CLICK OUTSIDE LISTENER TO CLOSE MENU 🔥
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (plusMenuRef.current && !plusMenuRef.current.contains(event.target)) {
@@ -112,7 +113,6 @@ function App() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // 🔥 HELPER TO SWITCH CHAT HISTORY PROPERLY 🔥
   const loadChatHistory = (newEgo) => {
     const checkLoveMode = newEgo === 'lover_girl' || newEgo === 'lover_boy';
     const storageKey = checkLoveMode ? 'aivox_love_chat_history' : 'aivox_chat_history';
@@ -159,7 +159,6 @@ function App() {
 
   const currentDisplayName = authUser ? authUser.displayName : (guestName || 'User');
 
-  // 🔥 POWERFUL COMPRESSION ENGINE 🔥
   const fileToGenerativePart = async (file) => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -237,11 +236,28 @@ function App() {
     };
   };
 
-  const handleGenerate = async (e, customPrompt = null, isRegenerate = false) => {
+  const handleGenerate = async (e, customPrompt = null, isRegenerate = false, bypassAuthCheck = false) => {
     if (e) e.preventDefault();
     const textToProcess = customPrompt || prompt.trim();
     
     if ((!textToProcess && !selectedImageBase64) || loading || isCompressing) return;
+
+    // 🔥 PLG HOOK 1: REQUIRE NAME FOR FIRST MESSAGE 🔥
+    if (!authUser && !isRegenerate) {
+      if (!guestName && !bypassAuthCheck) {
+        setShowNameModal(true);
+        return; 
+      }
+      
+      // 🔥 PLG HOOK 2: MESSAGE LIMIT BLOCKER (5 MESSAGES MAX) 🔥
+      const msgCount = parseInt(localStorage.getItem('aivox_guest_msg_count') || '0', 10);
+      if (msgCount >= 5) {
+        setShowSignupHookModal(true);
+        return; // Stops message from sending
+      }
+      
+      localStorage.setItem('aivox_guest_msg_count', (msgCount + 1).toString());
+    }
 
     const imagePart = selectedImageBase64; 
     let userBase64Image = null;
@@ -395,19 +411,33 @@ function App() {
       setTimeout(() => inputRef.current?.focus(), 100);
       
       if (finalResponse) {
+        const trackingName = currentDisplayName || tempName.trim() || 'User';
         trackUserActivity({
           prompt: imagePart ? `[📸 Image Sent] ${textToProcess}` : textToProcess, 
           response: finalResponse, 
           model: finalModel, 
           timeTakenMs, 
           isRoasterMode: isActuallyRoasting,
-          userName: currentDisplayName, 
+          userName: trackingName, 
           activeMode: currentEgo, 
           isLoveMsg: isCurrentlyLove,
           attachedImage: userBase64Image 
         });
       }
     }
+  };
+
+  const handleNameSubmit = () => {
+    if (!tempName.trim()) return;
+    const finalName = tempName.trim();
+    
+    localStorage.setItem('aivox_guest_name', finalName);
+    setGuestName(finalName);
+    setShowNameModal(false);
+    
+    setTimeout(() => {
+      handleGenerate(null, null, false, true);
+    }, 150);
   };
 
   const handleRegenerate = () => {
@@ -477,7 +507,6 @@ function App() {
     showToast(newEgo === 'savage' ? "Savage Mode Activated 🔥" : "Normal Mode Activated ✨");
   };
 
-  // 🔥 DIRECT NORMAL MODE FUNCTION 🔥
   const activateNormalMode = () => {
     setActiveEgo('smart');
     setIsRoasterMode(false);
@@ -495,6 +524,131 @@ function App() {
   return (
     <div className={`app-container ${isDarkMode ? 'dark-mode' : 'light-mode'} ${themeClass}`}>
       {toastMsg && <div className="custom-toast">{toastMsg}</div>}
+
+      {/* 🔥 THE NAME MODAL (UNCHANGED) 🔥 */}
+      {showNameModal && (
+        <div className="custom-modal-overlay" style={{ display: 'flex', position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.75)', zIndex: 9999, alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(12px)' }}>
+          <div className="custom-modal-box" style={{ background: isDarkMode ? 'linear-gradient(145deg, #151426 0%, #0b0a14 100%)' : '#ffffff', padding: '40px 30px', borderRadius: '24px', border: `1px solid ${isLoveMode ? 'rgba(255,77,133,0.4)' : 'rgba(140,130,242,0.4)'}`, width: '85%', maxWidth: '380px', textAlign: 'center', boxShadow: `0 20px 60px ${isLoveMode ? 'rgba(255,77,133,0.15)' : 'rgba(140,130,242,0.15)'}`, position: 'relative', overflow: 'hidden', animation: 'scaleIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards' }}>
+            
+            <div style={{ position: 'absolute', top: '-50px', left: '50%', transform: 'translateX(-50%)', width: '150px', height: '150px', background: isLoveMode ? '#ff4d85' : '#8c82f2', filter: 'blur(60px)', opacity: 0.2, pointerEvents: 'none' }}></div>
+
+            <div style={{ position: 'relative', width: '84px', height: '84px', margin: '0 auto 24px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg viewBox="0 0 100 100" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}>
+                <circle cx="50" cy="50" r="46" fill="none" stroke={isLoveMode ? '#ff4d85' : '#8c82f2'} strokeWidth="1.5" strokeDasharray="8 6" opacity="0.4">
+                  <animateTransform attributeName="transform" type="rotate" from="0 50 50" to="360 50 50" dur="12s" repeatCount="indefinite" />
+                </circle>
+                <circle cx="50" cy="50" r="38" fill="none" stroke={isLoveMode ? '#ff4d85' : '#8c82f2'} strokeWidth="2" opacity="0.2">
+                  <animateTransform attributeName="transform" type="rotate" from="360 50 50" to="0 50 50" dur="8s" repeatCount="indefinite" />
+                </circle>
+                <circle cx="50" cy="50" r="28" fill={isLoveMode ? 'rgba(255,77,133,0.15)' : 'rgba(140,130,242,0.15)'} stroke={isLoveMode ? '#ff4d85' : '#8c82f2'} strokeWidth="2">
+                  <animate attributeName="r" values="26; 30; 26" dur="3s" repeatCount="indefinite" />
+                  <animate attributeName="opacity" values="0.6; 1; 0.6" dur="3s" repeatCount="indefinite" />
+                </circle>
+              </svg>
+              <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke={isLoveMode ? '#ff4d85' : '#8c82f2'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'relative', zIndex: 2 }}>
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+              </svg>
+            </div>
+
+            <h3 style={{ margin: '0 0 10px 0', color: isDarkMode ? '#fff' : '#111', fontSize: '24px', fontWeight: '800', letterSpacing: '-0.5px' }}>
+              Welcome to <span style={{ color: isLoveMode ? '#ff4d85' : '#8c82f2' }}>Aivox</span>
+            </h3>
+            <p style={{ margin: '0 0 28px 0', fontSize: '14px', color: isDarkMode ? '#8a8d9e' : '#666', lineHeight: '1.6', fontWeight: '500' }}>
+              Identify yourself to begin the experience.
+            </p>
+            
+            <div style={{ position: 'relative', marginBottom: '20px' }}>
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}>
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+              </svg>
+              <input 
+                type="text" 
+                placeholder="Enter your name..." 
+                value={tempName} 
+                onChange={(e) => setTempName(e.target.value)} 
+                onKeyDown={(e) => { if (e.key === 'Enter') handleNameSubmit(); }}
+                style={{ width: '100%', padding: '16px 16px 16px 44px', borderRadius: '14px', border: '1px solid var(--border-color)', background: isDarkMode ? 'rgba(0,0,0,0.3)' : '#f8f8fd', color: 'var(--text-main)', fontSize: '15px', outline: 'none', transition: 'all 0.3s', fontWeight: '600', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.05)' }}
+                onFocus={(e) => e.target.style.borderColor = isLoveMode ? '#ff4d85' : '#8c82f2'}
+                onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
+                autoFocus
+              />
+            </div>
+
+            <button 
+              onClick={handleNameSubmit} 
+              disabled={!tempName.trim()} 
+              style={{ width: '100%', padding: '16px', borderRadius: '14px', border: 'none', background: tempName.trim() ? (isLoveMode ? 'linear-gradient(135deg, #ff4d85, #ff758c)' : 'linear-gradient(135deg, #8c82f2, #7063f4)') : 'var(--border-color)', color: tempName.trim() ? '#fff' : 'var(--text-muted)', cursor: tempName.trim() ? 'pointer' : 'not-allowed', fontWeight: '800', fontSize: '15px', transition: 'all 0.3s ease', marginBottom: '28px', boxShadow: tempName.trim() ? `0 8px 25px ${isLoveMode ? 'rgba(255,77,133,0.35)' : 'rgba(140,130,242,0.35)'}` : 'none', textTransform: 'uppercase', letterSpacing: '1px' }}
+            >
+              Start Chatting 🚀
+            </button>
+
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '20px' }}>
+              <div style={{ height: '1px', background: 'var(--border-color)', width: '100%' }}></div>
+              <span style={{ position: 'absolute', background: isDarkMode ? '#11101e' : '#fff', padding: '0 12px', fontSize: '11px', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '1px' }}>OR</span>
+            </div>
+
+            <a href="/auth" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '12px', borderRadius: '12px', background: isDarkMode ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)', color: 'var(--text-main)', textDecoration: 'none', fontWeight: '700', fontSize: '13px', transition: 'all 0.2s' }} onMouseOver={(e) => e.target.style.background = isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'} onMouseOut={(e) => e.target.style.background = isDarkMode ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)'}>
+              Log In / Sign Up
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"></path><path d="M12 5l7 7-7 7"></path></svg>
+            </a>
+          </div>
+        </div>
+      )}
+
+      {/* 🔥 THE PREMIUM "TAJ / CROWN" 5-MESSAGE LIMIT HOOK MODAL 🔥 */}
+      {showSignupHookModal && (
+        <div className="custom-modal-overlay" style={{ display: 'flex', position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 9999, alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(15px)' }}>
+          <div className="custom-modal-box" style={{ background: isDarkMode ? 'linear-gradient(145deg, #1f1b0a 0%, #0b0a14 100%)' : '#ffffff', padding: '40px 30px', borderRadius: '24px', border: '1px solid rgba(245, 185, 66, 0.4)', width: '85%', maxWidth: '400px', textAlign: 'center', boxShadow: '0 20px 60px rgba(245, 185, 66, 0.15)', position: 'relative', overflow: 'hidden', animation: 'scaleIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards' }}>
+            
+            <button onClick={() => setShowSignupHookModal(false)} style={{ position: 'absolute', top: '18px', right: '18px', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', transition: '0.2s', zIndex: 10 }} onMouseOver={(e) => e.target.style.color='var(--text-main)'} onMouseOut={(e) => e.target.style.color='var(--text-muted)'}>
+               <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+
+            <div style={{ position: 'absolute', top: '-50px', left: '50%', transform: 'translateX(-50%)', width: '150px', height: '150px', background: '#f5b942', filter: 'blur(70px)', opacity: 0.25, pointerEvents: 'none' }}></div>
+
+            {/* 🔥 ANIMATED PREMIUM GOLD CROWN (TAJ) SVG 🔥 */}
+            <div style={{ position: 'relative', width: '80px', height: '80px', margin: '0 auto 20px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg viewBox="0 0 100 100" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}>
+                 <circle cx="50" cy="50" r="40" fill="none" stroke="#f5b942" strokeWidth="2" strokeDasharray="10 10" opacity="0.5">
+                   <animateTransform attributeName="transform" type="rotate" from="0 50 50" to="360 50 50" dur="10s" repeatCount="indefinite" />
+                 </circle>
+                 <circle cx="50" cy="50" r="30" fill="rgba(245,185,66,0.1)" stroke="#f5b942" strokeWidth="1.5">
+                   <animate attributeName="r" values="28; 32; 28" dur="2s" repeatCount="indefinite" />
+                   <animate attributeName="opacity" values="0.5; 1; 0.5" dur="2s" repeatCount="indefinite" />
+                 </circle>
+              </svg>
+              {/* Premium Crown SVG */}
+              <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="#f5b942" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'relative', zIndex: 2 }}>
+                <polygon points="2 18 22 18 20 5 16 12 12 2 8 12 4 5 2 18"></polygon>
+                <path d="M2 22h20"></path>
+              </svg>
+            </div>
+            
+            <h3 style={{ margin: '0 0 12px 0', color: isDarkMode ? '#fff' : '#111', fontSize: '24px', fontWeight: '900', letterSpacing: '-0.5px' }}>
+              Free Limit Reached!
+            </h3>
+            
+            <p style={{ margin: '0 0 30px 0', fontSize: '14px', color: isDarkMode ? '#a0a0b0' : '#555', lineHeight: '1.6', fontWeight: '500' }}>
+              Hope you are enjoying Aivox Pro. 🚀<br/>Sign up now to send unlimited messages, save your chat history, and unlock all features.
+            </p>
+
+            <button 
+              onClick={() => window.location.href = '/auth'}
+              style={{ width: '100%', padding: '16px', borderRadius: '14px', border: 'none', background: 'linear-gradient(135deg, #f5b942, #f59e0b)', color: '#111', cursor: 'pointer', fontWeight: '800', fontSize: '15px', transition: 'all 0.3s ease', marginBottom: '16px', boxShadow: '0 8px 25px rgba(245, 185, 66, 0.35)', textTransform: 'uppercase', letterSpacing: '1px' }}
+              onMouseOver={(e) => e.target.style.transform = 'translateY(-2px)'}
+              onMouseOut={(e) => e.target.style.transform = 'translateY(0)'}
+            >
+              Create Free Account ✨
+            </button>
+            
+            <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0, cursor: 'pointer', textDecoration: 'underline', fontWeight: '600' }} onClick={() => setShowSignupHookModal(false)}>
+              Maybe Later
+            </p>
+          </div>
+        </div>
+      )}
 
       {showClearModal && (
         <div className="custom-modal-overlay" onClick={() => setShowClearModal(false)} style={{ display: 'flex', position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', zIndex: 9999, alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(5px)' }}>
@@ -667,12 +821,10 @@ function App() {
                         </div>
                       )}
 
-                      {/* 🔥 PREMIUM CODE COPY FEATURE APPLIED HERE 🔥 */}
                       {msg.role === 'ai' ? (
                         <ReactMarkdown
                           components={{
                             pre({node, children, ...props}) {
-                              // Deep extract text to ensure clean copying of code
                               const extractText = (child) => {
                                 if (typeof child === 'string') return child;
                                 if (Array.isArray(child)) return child.map(extractText).join('');
