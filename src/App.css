@@ -338,17 +338,17 @@ body {
 }
 .mic-btn:hover, .plus-btn:hover { background: var(--hover-bg); color: var(--text-main); }
 
-/* 🔥 NEW: PLUS MENU DROPDOWN STYLING 🔥 */
+/* 🔥 INCREASED: PLUS MENU DROPDOWN STYLING (Bigger for Touch) 🔥 */
 .plus-dropdown-menu {
   position: absolute;
-  bottom: 60px; /* Thoda upar input box se */
+  bottom: 65px; /* Thoda upar taaki kate na */
   left: 0;
   background: var(--dropdown-bg);
   border: 1px solid var(--border-color);
-  border-radius: 16px;
+  border-radius: 18px; /* Smooth corners */
   box-shadow: 0 10px 30px var(--shadow-color);
-  padding: 8px;
-  width: 180px;
+  padding: 12px; /* Increased padding */
+  width: 220px; /* Increased Width */
   z-index: 100;
   backdrop-filter: blur(10px);
   animation: popUp 0.2s cubic-bezier(0.18, 0.89, 0.32, 1.28);
@@ -358,13 +358,13 @@ body {
 .dropdown-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
+  gap: 12px; /* Increased gap */
+  padding: 14px 16px; /* BIGGER touch target */
   color: var(--text-main);
-  font-size: 14px;
+  font-size: 16px; /* Larger text */
   font-weight: 500;
   cursor: pointer;
-  border-radius: 10px;
+  border-radius: 12px;
   transition: 0.2s;
 }
 .dropdown-item:hover {
@@ -373,7 +373,7 @@ body {
 .dropdown-divider {
   height: 1px;
   background: var(--border-color);
-  margin: 4px 0;
+  margin: 6px 0; /* Slightly more space for divider */
 }
 
 /* 🔥 NEW: IMAGE PREVIEW STYLING 🔥 */
@@ -503,9 +503,9 @@ body {
   
   .message-bubble { padding: 12px 16px; font-size: 14px; }
   
-  /* Mobile dropdown tweak */
-  .plus-dropdown-menu { bottom: 55px; left: 5px; width: 160px; }
-  .dropdown-item { font-size: 13px; padding: 8px 12px; }
+  /* 🔥 INCREASED: Mobile dropdown tweak 🔥 */
+  .plus-dropdown-menu { bottom: 65px; left: 5px; width: 210px; padding: 10px; }
+  .dropdown-item { font-size: 15px; padding: 14px 16px; }
 }
 
 @keyframes spin { 100% { transform: rotate(360deg); } } 
