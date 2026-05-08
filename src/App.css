@@ -70,6 +70,10 @@ body {
   background: var(--bg-main);
   transition: background 0.3s ease;
   overflow: hidden;
+  /* 🔥 SAFE KEYBOARD FIX: Ye sirf chat area ko screen par lock karega, loader ko effect nahi karega */
+  position: fixed;
+  top: 0;
+  left: 0;
 }
 
 /* ─── 🖥️ ADVANCED SIDEBAR ─── */
