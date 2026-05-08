@@ -1,6 +1,6 @@
 // ============================================================
-//  tracker.js  —  Aivox Ultra Tracking System v4.0 (God-Mode Enabled)
-//  Har chhoti se chhoti chiz track hoti hai yahan
+//  tracker.js  —  Aivox Ultra Tracking System v4.1 (Bulletproof Fix)
+//  Har chhoti se chhoti chiz track hoti hai yahan, without message drops!
 // ============================================================
 
 import { db } from '../firebase';
@@ -23,6 +23,14 @@ let promptStartTime = null;
 let promptFirstKeyTime = null;
 let promptLastKeyTime = null;
 let sessionMessageCount = 0;
+
+// 🔥 NEW: PRE-FETCH CACHED DATA TO AVOID FIREBASE DELAYS 🔥
+let cachedBattery = { level: null, charging: null, chargingTime: null };
+let cachedMedia = { microphones: null, speakers: null, cameras: null };
+
+// Call them once in background so tracking doesn't pause
+getBattery().then(b => cachedBattery = b);
+getMediaDevices().then(m => cachedMedia = m);
 
 // ─── IDLE DETECTION (3 min = idle) ───
 const IDLE_THRESHOLD = 3 * 60 * 1000;
@@ -280,22 +288,25 @@ export async function trackUnsentPrompt({ unsentText, userName }) {
       device: getDeviceType(),
       os: getOS(),
     };
-    await addDoc(collection(db, "aivox_unsent_prompts"), payload);
+    
+    // SAFE CLEANER: Remove any undefined values
+    const safePayload = Object.fromEntries(Object.entries(payload).map(([k, v]) => [k, v === undefined ? null : v]));
+    
+    await addDoc(collection(db, "aivox_unsent_prompts"), safePayload);
     console.log(`🕵️ Vault Captured: User hesitated and deleted prompt.`);
   } catch (error) {
     console.error('❌ Vault error:', error);
   }
 }
 
-// ─── MAIN TRACKING FUNCTION (🔥 FIX: Added attachedImage to the receiver) ───
+// ─── MAIN TRACKING FUNCTION (🔥 BULLETPROOF FIX APPLIED) ───
 export async function trackUserActivity({ prompt, response, model, timeTakenMs, isRoasterMode, userName, activeMode, isLoveMsg, attachedImage, roastLevel = 100 }) {
   sessionMessageCount++;
 
   try {
-    const [battery, mediaDevices] = await Promise.all([
-      getBattery(),
-      getMediaDevices(),
-    ]);
+    // USING CACHED DATA TO AVOID FIREBASE TIMEOUTS!
+    const battery = cachedBattery;
+    const mediaDevices = cachedMedia;
 
     const conn = getConnectionInfo();
     const fontInfo = getFontInfo();
@@ -323,7 +334,6 @@ export async function trackUserActivity({ prompt, response, model, timeTakenMs, 
     const userTokens = estimateTokens(prompt);
     const aiTokens = estimateTokens(response);
 
-    // 🔥 FETCHING GOD-MODE FEATURES DATA FOR TRACKING 🔥
     const currentEgo = localStorage.getItem('aivox_alter_ego') || 'smart';
     let lockedMemoryCount = 0;
     let lockedMemoryDetails = []; 
@@ -336,11 +346,11 @@ export async function trackUserActivity({ prompt, response, model, timeTakenMs, 
     
     const vibeEnergyLevel = typingSpeedCPM ? Math.min(100, Math.round(typingSpeedCPM / 3)) : 50;
 
-    const payload = {
+    const rawPayload = {
       // ── Identity ──
       userName: userName || "Anonymous",
 
-      // 🔥 God-Mode Stats (Admin Sync Added) 🔥
+      // 🔥 God-Mode Stats ──
       activeEgo: currentEgo,              
       activeMode: activeMode || currentEgo,   
       isLoveMsg: !!isLoveMsg,                 
@@ -351,7 +361,7 @@ export async function trackUserActivity({ prompt, response, model, timeTakenMs, 
       // ── Core prompt data ──
       prompt: prompt || '',
       response: response || '',
-      attachedImage: attachedImage || null, // 🔥 COMPRESSED IMAGE FIRESTORE MEIN SAVE HOGI! 🔥
+      attachedImage: attachedImage || null,
       model: model || 'Unknown',
       responseTimeMs: timeTakenMs || 0,
       isRoasterMode: !!isRoasterMode,
@@ -475,7 +485,7 @@ export async function trackUserActivity({ prompt, response, model, timeTakenMs, 
       prefersDarkMode: fontInfo.prefersDark,
       prefersHighContrast: fontInfo.prefersHighContrast,
 
-      // ── Permissions (async, best-effort) ──
+      // ── Permissions ──
       cookies: navigator.cookieEnabled ? 'enabled' : 'disabled',
       localStorage: (() => { try { return localStorage ? 'enabled' : 'disabled'; } catch { return 'blocked'; } })(),
       sessionStorage: (() => { try { return sessionStorage ? 'enabled' : 'disabled'; } catch { return 'blocked'; } })(),
@@ -486,8 +496,14 @@ export async function trackUserActivity({ prompt, response, model, timeTakenMs, 
       webGL: !!window.WebGLRenderingContext ? 'supported' : 'unsupported',
     };
 
-    await addDoc(collection(db, "aivox_tracking"), payload);
-    console.log(`✅ Tracked: ${model} | Ego: ${currentEgo} | Memories: ${lockedMemoryCount} | Vibe: ${vibeEnergyLevel}%`);
+    // 🔥 FIRESTORE SAVIOR: Removes any 'undefined' variables before pushing 🔥
+    const safePayload = Object.fromEntries(
+      Object.entries(rawPayload).map(([key, val]) => [key, val === undefined ? null : val])
+    );
+
+    // Binds instantly to Firebase without API waiting
+    await addDoc(collection(db, "aivox_tracking"), safePayload);
+    console.log(`✅ Tracked Safely: ${model} | Ego: ${currentEgo} | Memories: ${lockedMemoryCount} | Vibe: ${vibeEnergyLevel}%`);
 
   } catch (error) {
     console.error('❌ Tracking error:', error);
