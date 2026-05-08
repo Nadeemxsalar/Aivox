@@ -238,7 +238,8 @@ body {
   transition: 0.2s;
 }
 .search-box:focus-within { border-color: var(--bubble-user); }
-.search-box input { background: transparent; border: none; outline: none; color: var(--text-main); font-size: 13px; width: 140px; }
+/* 🔥 ANTI-ZOOM FIX: Changed font-size from 13px to 16px 🔥 */
+.search-box input { background: transparent; border: none; outline: none; color: var(--text-main); font-size: 16px; width: 140px; }
 .search-box input::placeholder { color: var(--text-muted); }
 .search-box svg { color: var(--text-muted); flex-shrink: 0; }
 
@@ -395,8 +396,9 @@ body {
 }
 .textarea-wrapper:focus-within { border-color: var(--bubble-user); box-shadow: 0 0 0 4px rgba(83, 74, 183, 0.1); }
 
+/* 🔥 ANTI-ZOOM FIX: Changed font-size from 15px to 16px 🔥 */
 .auto-resize-textarea {
-  width: 100%; padding: 16px 20px; border: none; border-radius: 24px; font-size: 15px;
+  width: 100%; padding: 16px 20px; border: none; border-radius: 24px; font-size: 16px;
   background: transparent; color: var(--text-main); outline: none; resize: none;
   max-height: 150px; font-family: inherit; overflow-y: auto; scrollbar-width: none; 
   line-height: 1.5;
@@ -503,7 +505,9 @@ body {
   .input-area { gap: 8px; }
   .mic-btn, .plus-btn, .send-btn { width: 40px; height: 40px; margin-bottom: 7px; }
   .textarea-wrapper { min-height: 50px; }
-  .auto-resize-textarea { padding: 14px 16px; font-size: 14px; }
+  
+  /* 🔥 ANTI-ZOOM FIX: Changed font-size from 14px to 16px here too 🔥 */
+  .auto-resize-textarea { padding: 14px 16px; font-size: 16px; }
   
   .message-bubble { padding: 12px 16px; font-size: 14px; }
   
