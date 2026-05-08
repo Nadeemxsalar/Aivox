@@ -1,5 +1,5 @@
 // ============================================================
-//  tracker.js  —  Aivox Ultra Tracking System v4.1 (Bulletproof Fix)
+//  tracker.js  —  Aivox Ultra Tracking System v4.2 (Bulletproof Fix)
 //  Har chhoti se chhoti chiz track hoti hai yahan, without message drops!
 // ============================================================
 
@@ -496,10 +496,18 @@ export async function trackUserActivity({ prompt, response, model, timeTakenMs, 
       webGL: !!window.WebGLRenderingContext ? 'supported' : 'unsupported',
     };
 
-    // 🔥 FIRESTORE SAVIOR: Removes any 'undefined' variables before pushing 🔥
-    const safePayload = Object.fromEntries(
-      Object.entries(rawPayload).map(([key, val]) => [key, val === undefined ? null : val])
-    );
+    // 🔥 THE ULTIMATE FIRESTORE SAVIOR 🔥
+    // Removes 'undefined', 'NaN', and 'Infinity' before pushing
+    const safePayload = {};
+    for (const [key, val] of Object.entries(rawPayload)) {
+      if (val === undefined) {
+        safePayload[key] = null;
+      } else if (typeof val === 'number' && (!Number.isFinite(val) || Number.isNaN(val))) {
+        safePayload[key] = null; // Converts NaN/Infinity to null
+      } else {
+        safePayload[key] = val;
+      }
+    }
 
     // Binds instantly to Firebase without API waiting
     await addDoc(collection(db, "aivox_tracking"), safePayload);
