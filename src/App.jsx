@@ -444,32 +444,39 @@ function App() {
       setTimeout(() => inputRef.current?.focus(), 100);
       
       if (finalResponse) {
-        const trackingName = currentDisplayName || tempName.trim() || 'User';
-        trackUserActivity({
-          prompt: imagePart ? `[📸 Image Sent] ${textToProcess}` : textToProcess, 
-          response: finalResponse, 
-          model: finalModel, 
-          timeTakenMs, 
-          isRoasterMode: isActuallyRoasting,
-          userName: trackingName, 
-          activeMode: currentEgo, 
-          isLoveMsg: isCurrentlyLove,
-          attachedImage: userBase64Image 
-        });
+        try {
+          const trackingName = currentDisplayName || tempName.trim() || 'User';
+          trackUserActivity({
+            prompt: imagePart ? `[📸 Image Sent] ${textToProcess}` : textToProcess, 
+            response: finalResponse, 
+            model: finalModel, 
+            timeTakenMs, 
+            isRoasterMode: isActuallyRoasting,
+            userName: trackingName, 
+            activeMode: currentEgo, 
+            isLoveMsg: isCurrentlyLove,
+            attachedImage: userBase64Image 
+          });
+        } catch (trackErr) {
+          console.error("Tracking execution failed", trackErr);
+        }
       }
     }
   };
 
+  // 🔥 THE FIX: EXPLICIT PROMPT CAPTURE FOR NAME MODAL 🔥
   const handleNameSubmit = () => {
     if (!tempName.trim()) return;
     const finalName = tempName.trim();
-    
+    const explicitPrompt = prompt.trim(); // 🔥 Captures your "hi" message safely before re-render
+
     localStorage.setItem('aivox_guest_name', finalName);
     setGuestName(finalName);
     setShowNameModal(false);
     
     setTimeout(() => {
-      handleGenerate(null, null, false, true);
+      // 🔥 Passes explicitPrompt here so React doesn't lose it
+      handleGenerate(null, explicitPrompt, false, true);
     }, 150);
   };
 
