@@ -445,14 +445,16 @@ function App() {
       
       if (finalResponse) {
         try {
-          const trackingName = currentDisplayName || tempName.trim() || 'User';
+          // 🔥 THE ULTIMATE FIX: Fetching fresh name directly from localStorage to beat React's stale closure 🔥
+          const freshTrackingName = authUser?.displayName || localStorage.getItem('aivox_guest_name') || tempName.trim() || 'Anonymous';
+          
           trackUserActivity({
             prompt: imagePart ? `[📸 Image Sent] ${textToProcess}` : textToProcess, 
             response: finalResponse, 
             model: finalModel, 
             timeTakenMs, 
             isRoasterMode: isActuallyRoasting,
-            userName: trackingName, 
+            userName: freshTrackingName, 
             activeMode: currentEgo, 
             isLoveMsg: isCurrentlyLove,
             attachedImage: userBase64Image 
@@ -464,7 +466,6 @@ function App() {
     }
   };
 
-  // 🔥 THE FIX: EXPLICIT PROMPT CAPTURE FOR NAME MODAL 🔥
   const handleNameSubmit = () => {
     if (!tempName.trim()) return;
     const finalName = tempName.trim();
@@ -510,13 +511,14 @@ function App() {
   };
 
   const executeClearChat = () => {
+    const freshName = authUser?.displayName || localStorage.getItem('aivox_guest_name') || 'Anonymous';
     trackUserActivity({
       prompt: "🧹 [SYSTEM ACTION]", 
       response: `User ne chat clear kar di hai. Delete karne se pehle chat mein **${messages.length} messages** the.`, 
       model: "System-Log", 
       timeTakenMs: 0, 
       isRoasterMode: isRoasterMode,
-      userName: currentDisplayName, 
+      userName: freshName, 
       activeMode: activeEgo, 
       isLoveMsg: isLoveMode
     });
