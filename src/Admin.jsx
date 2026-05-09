@@ -304,19 +304,71 @@ function Admin() {
   const maxHourly = Math.max(...hourlyData, 1);
   const peakHour = hourlyData.indexOf(Math.max(...hourlyData));
 
+  // 🔥 THE FIX: SMART ALIAS MERGE LOGIC (KEEPS CHAT TOGETHER + SHOWS BOTH NAMES) 🔥
   const chatGroups = logs.reduce((groups, log) => {
     const fp = makeFingerprint(log);
     const uName = log.userName || "Anonymous";
-    const groupId = `${uName}_${fp}`;
-    if (!groups[groupId]) groups[groupId] = { id: fp, userName: uName, device: log.device||"Unknown", os: log.os||"Unknown", browser: log.browserVendor||"Unknown", network: log.network||"WIFI", messages: [] };
+    
+    let matchedGroupId = null;
+
+    for (const key in groups) {
+      if (groups[key].id === fp) {
+        const existingName = groups[key].userName.toLowerCase();
+        const currentName = uName.toLowerCase();
+        
+        // Base first names match check (e.g. "meena" matches "meena kumari")
+        const existingFirst = existingName.split(' ')[0];
+        const currentFirst = currentName.split(' ')[0];
+
+        // Merge ONLY if First Name is same OR it's an anonymous/guest fallback
+        // This ensures "Nadeem" and "Prachi" stay separate on the same device!
+        if (
+          existingFirst === currentFirst ||
+          existingName === "anonymous" || existingName === "user" || existingName.includes("guest") ||
+          currentName === "anonymous" || currentName === "user" || currentName.includes("guest")
+        ) {
+          matchedGroupId = key;
+          break;
+        }
+      }
+    }
+
+    const groupId = matchedGroupId || `${uName}_${fp}`;
+
+    if (!groups[groupId]) {
+      groups[groupId] = { 
+        id: fp, 
+        userName: uName, 
+        aliases: [uName], // ⬅️ Array to store name history!
+        device: log.device||"Unknown", 
+        os: log.os||"Unknown", 
+        browser: log.browserVendor||"Unknown", 
+        network: log.network||"WIFI", 
+        messages: [] 
+      };
+    } else {
+      // Add to aliases if this is a new name for this session
+      if (!groups[groupId].aliases.includes(uName)) {
+        groups[groupId].aliases.push(uName);
+      }
+      
+      // Upgrade Main Name: Always prefer the longer/real name (e.g., 'meena' -> 'meena kumari')
+      const currentGroupLen = groups[groupId].userName.length;
+      if (uName !== "Anonymous" && uName !== "User" && !uName.toLowerCase().includes("guest") && uName.length > currentGroupLen) {
+        groups[groupId].userName = uName;
+      }
+    }
+
     groups[groupId].messages.push(log);
     return groups;
   }, {});
+
   const userList = Object.values(chatGroups).sort((a, b) => new Date(b.messages[0].timestamp) - new Date(a.messages[0].timestamp));
   const uniqueUsers = userList.length;
 
   const filteredChatUsers = userList.filter(u =>
     u.userName.toLowerCase().includes(chatSearchQuery.toLowerCase()) ||
+    (u.aliases && u.aliases.some(alias => alias.toLowerCase().includes(chatSearchQuery.toLowerCase()))) ||
     u.device.toLowerCase().includes(chatSearchQuery.toLowerCase())
   );
   const filteredRegisteredUsers = registeredUsers.filter(u =>
@@ -1222,7 +1274,7 @@ function Admin() {
         )}
 
         {/* ══════════════════════════════════════════
-            USER CHATS (🔥 NOW WITH FULL SCREEN IMAGE ZOOM 🔥)
+            USER CHATS (🔥 NOW WITH ALIAS TRACKING 🔥)
         ══════════════════════════════════════════ */}
         {activeTab === 'chats' && (
           <div className={styles.sectionFadeIn} style={{ height:'100%', overflow:'hidden' }}>
@@ -1244,6 +1296,12 @@ function Admin() {
                       <div className={styles.userAvatar}>{user.os?.includes('Mac')||user.os?.includes('iOS')?'🍎':user.os?.includes('Android')?'🤖':'💻'}</div>
                       <div className={styles.userInfo}>
                         <h4>{user.userName}</h4>
+                        {/* 🔥 ADMIN: SHOW NAME ALIASES IN LIST 🔥 */}
+                        {user.aliases && user.aliases.length > 1 && (
+                          <div style={{fontSize:'10px', color:'#00ff80', marginBottom:'3px', fontWeight:'600'}}>
+                            Aliases: {user.aliases.filter(n => n !== user.userName).join(', ')}
+                          </div>
+                        )}
                         <p>{user.device} • {user.os}</p>
                         <span style={{fontSize:'10px',color:'#555'}}>{user.messages.length} msgs | {user.network} | ID: {user.id}</span>
                       </div>
@@ -1260,6 +1318,12 @@ function Admin() {
                       <button className={styles.mobileBackBtn} onClick={() => setIsMobileChatView(false)}>⬅️</button>
                       <div>
                         <h3 style={{margin:0}}>{selectedUser.userName}</h3>
+                        {/* 🔥 ADMIN: SHOW NAME ALIASES IN HEADER 🔥 */}
+                        {selectedUser.aliases && selectedUser.aliases.length > 1 && (
+                          <p style={{margin:0,fontSize:'11px',color:'#00ff80',fontWeight:'600'}}>
+                            Also known as: {selectedUser.aliases.filter(n => n !== selectedUser.userName).join(', ')}
+                          </p>
+                        )}
                         <p style={{margin:0,fontSize:'11px',color:'#888'}}>{selectedUser.device} | FP: {selectedUser.id}</p>
                       </div>
                     </div>
@@ -1281,6 +1345,13 @@ function Admin() {
                             <div className={`${styles.bubbleRow} ${styles.rowUser}`}>
                               <div className={`${styles.chatBubble} ${styles.bubbleUser}`}>
                                 
+                                {/* 🔥 ADMIN: SHOW WHICH NAME WAS USED FOR THIS SPECIFIC MESSAGE 🔥 */}
+                                {selectedUser.aliases && selectedUser.aliases.length > 1 && log.userName !== selectedUser.userName && (
+                                  <div style={{ fontSize: '10px', color: '#f5b942', marginBottom: '6px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '4px', fontWeight: 'bold' }}>
+                                    📝 Sent as: {log.userName}
+                                  </div>
+                                )}
+
                                 {/* 🔥 ADMIN IMAGE VIEWER: ZOOM ON CLICK 🔥 */}
                                 {log.attachedImage && (
                                   <div style={{ marginBottom: log.prompt ? '12px' : '0' }}>

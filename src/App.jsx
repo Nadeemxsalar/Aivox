@@ -445,7 +445,6 @@ function App() {
       
       if (finalResponse) {
         try {
-          // 🔥 THE ULTIMATE FIX: Fetching fresh name directly from localStorage to beat React's stale closure 🔥
           const freshTrackingName = authUser?.displayName || localStorage.getItem('aivox_guest_name') || tempName.trim() || 'Anonymous';
           
           trackUserActivity({
@@ -466,20 +465,37 @@ function App() {
     }
   };
 
+  // 🔥 THE FIX: EXACT AUTH.JSX GUEST MODE BEHAVIOR (HARD RELOAD) 🔥
   const handleNameSubmit = () => {
     if (!tempName.trim()) return;
     const finalName = tempName.trim();
-    const explicitPrompt = prompt.trim(); // 🔥 Captures your "hi" message safely before re-render
+    const explicitPrompt = prompt.trim(); 
 
+    // Name save kiya localStorage me
     localStorage.setItem('aivox_guest_name', finalName);
-    setGuestName(finalName);
-    setShowNameModal(false);
     
-    setTimeout(() => {
-      // 🔥 Passes explicitPrompt here so React doesn't lose it
-      handleGenerate(null, explicitPrompt, false, true);
-    }, 150);
+    // User ne jo pehla message type kiya tha, use temporary save kar diya auto-send ke liye
+    if (explicitPrompt) {
+      localStorage.setItem('aivox_pending_prompt', explicitPrompt);
+    }
+    
+    // 🔥 Pura page reload kar diya (Exact old behavior!) jisse tracker fresh state ke sath chale 🔥
+    window.location.href = '/';
   };
+
+  // 🔥 AUTO-SEND PENDING PROMPT AFTER RELOAD 🔥
+  useEffect(() => {
+    if (!isAuthChecking) {
+      const pendingPrompt = localStorage.getItem('aivox_pending_prompt');
+      if (pendingPrompt) {
+        localStorage.removeItem('aivox_pending_prompt');
+        // Thoda delay diya taaki UI load ho jaye
+        setTimeout(() => {
+          handleGenerate(null, pendingPrompt, false, true);
+        }, 300);
+      }
+    }
+  }, [isAuthChecking]);
 
   const handleRegenerate = () => {
     const lastUserMsgIndex = messages.map(m => m.role).lastIndexOf('user');

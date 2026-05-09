@@ -1,5 +1,5 @@
 // ============================================================
-//  tracker.js  —  Aivox Ultra Tracking System v4.2 (Bulletproof Fix)
+//  tracker.js  —  Aivox Ultra Tracking System v4.3 (Session Support added)
 //  Har chhoti se chhoti chiz track hoti hai yahan, without message drops!
 // ============================================================
 
@@ -300,7 +300,7 @@ export async function trackUnsentPrompt({ unsentText, userName }) {
 }
 
 // ─── MAIN TRACKING FUNCTION (🔥 BULLETPROOF FIX APPLIED) ───
-export async function trackUserActivity({ prompt, response, model, timeTakenMs, isRoasterMode, userName, activeMode, isLoveMsg, attachedImage, roastLevel = 100 }) {
+export async function trackUserActivity({ prompt, response, model, timeTakenMs, isRoasterMode, userName, activeMode, isLoveMsg, attachedImage, roastLevel = 100, sessionId = null, email = null }) {
   sessionMessageCount++;
 
   try {
@@ -349,6 +349,8 @@ export async function trackUserActivity({ prompt, response, model, timeTakenMs, 
     const rawPayload = {
       // ── Identity ──
       userName: userName || "Anonymous",
+      sessionId: sessionId || "none", // ⬅️ NEW
+      email: email || "guest",        // ⬅️ NEW
 
       // 🔥 God-Mode Stats ──
       activeEgo: currentEgo,              
