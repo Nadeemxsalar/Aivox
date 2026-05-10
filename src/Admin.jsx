@@ -143,6 +143,88 @@ function DailyChart({ data, valueKey, color = '#8c82f2', formatter = v => v }) {
   );
 }
 
+// ─── ADVANCED CYBER-HUD LOADING SCREEN ───
+function LoadingScreen({ message = 'System Initializing...' }) {
+  const [progress, setProgress] = useState(0);
+  const [statusText, setStatusText] = useState('Establishing secure connection...');
+
+  useEffect(() => {
+    const statuses = [
+      "Bypassing security protocols...",
+      "Decrypting neural pathways...",
+      "Syncing global nodes...",
+      "Fetching God-Mode analytics...",
+      "Loading Aivox Core Engine..."
+    ];
+    let idx = 0;
+
+    const pInt = setInterval(() => {
+      setProgress(prev => {
+        const next = prev + (Math.random() * 8);
+        return next >= 99 ? 99 : next;
+      });
+    }, 200);
+
+    const sInt = setInterval(() => {
+      idx = (idx + 1) % statuses.length;
+      setStatusText(statuses[idx]);
+    }, 800);
+
+    return () => { clearInterval(pInt); clearInterval(sInt); };
+  }, []);
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: '#05050a', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 99999, overflow: 'hidden', fontFamily: '"Inter", monospace' }}>
+      <style>{`
+        @keyframes coreSpin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        @keyframes coreSpinRev { 0% { transform: rotate(360deg); } 100% { transform: rotate(0deg); } }
+        @keyframes pulseRing { 0%, 100% { transform: scale(0.95); opacity: 0.5; } 50% { transform: scale(1.05); opacity: 1; box-shadow: 0 0 35px rgba(0, 229, 255, 0.6); } }
+        @keyframes floatUp { 0% { transform: translateY(100vh) scale(0); opacity: 0; } 50% { opacity: 1; } 100% { transform: translateY(-10vh) scale(1.5); opacity: 0; } }
+        @keyframes textFlicker { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+        .cyber-particle { position: absolute; background: #00e5ff; border-radius: 50%; box-shadow: 0 0 12px #00e5ff; }
+      `}</style>
+
+      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(rgba(140, 130, 242, 0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(140, 130, 242, 0.04) 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
+      <div style={{ position: 'absolute', width: '50vw', height: '50vw', background: 'radial-gradient(circle, rgba(140,130,242,0.15) 0%, transparent 60%)', filter: 'blur(60px)', animation: 'pulseRing 4s infinite alternate' }}></div>
+
+      {[...Array(20)].map((_, i) => (
+        <div key={i} className="cyber-particle" style={{ left: `${Math.random() * 100}vw`, width: `${Math.random() * 4 + 1}px`, height: `${Math.random() * 4 + 1}px`, animation: `floatUp ${Math.random() * 3 + 2}s linear infinite`, animationDelay: `${Math.random() * 2}s` }}></div>
+      ))}
+
+      <div style={{ position: 'relative', width: 240, height: 240, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 40 }}>
+        <svg viewBox="0 0 200 200" style={{ position: 'absolute', width: '100%', height: '100%', animation: 'coreSpin 12s linear infinite' }}>
+          <circle cx="100" cy="100" r="95" fill="none" stroke="rgba(140, 130, 242, 0.4)" strokeWidth="2" strokeDasharray="4 8" />
+          <circle cx="100" cy="100" r="95" fill="none" stroke="#00e5ff" strokeWidth="3" strokeDasharray="40 250" strokeLinecap="round" />
+        </svg>
+        <svg viewBox="0 0 200 200" style={{ position: 'absolute', width: '80%', height: '80%', animation: 'coreSpinRev 8s linear infinite' }}>
+          <circle cx="100" cy="100" r="85" fill="none" stroke="#8c82f2" strokeWidth="5" strokeDasharray="50 40 20 40" opacity="0.8" />
+        </svg>
+        <div style={{ position: 'absolute', width: '55%', height: '55%', background: 'linear-gradient(135deg, rgba(140,130,242,0.2), rgba(0,229,255,0.2))', border: '2px solid #00e5ff', borderRadius: '50%', animation: 'pulseRing 2s infinite', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(5px)' }}>
+           <svg viewBox="0 0 24 24" width="45" height="45" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" style={{ filter: 'drop-shadow(0 0 10px #fff)' }}>
+             <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+             <polyline points="2 17 12 22 22 17"></polyline>
+             <polyline points="2 12 12 17 22 12"></polyline>
+           </svg>
+        </div>
+      </div>
+
+      <div style={{ zIndex: 10, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <h1 style={{ margin: 0, fontSize: 30, fontWeight: 900, background: 'linear-gradient(90deg, #8c82f2, #00e5ff)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', letterSpacing: 5, textTransform: 'uppercase', animation: 'textFlicker 3s infinite' }}>
+          {message}
+        </h1>
+        <div style={{ marginTop: 18, display: 'flex', alignItems: 'center', gap: 12, background: 'rgba(0,0,0,0.5)', padding: '8px 24px', borderRadius: 30, border: '1px solid rgba(0,229,255,0.3)', boxShadow: '0 4px 20px rgba(0,0,0,0.5)' }}>
+          <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#00ff80', boxShadow: '0 0 12px #00ff80', animation: 'textFlicker 1s infinite' }}></div>
+          <span style={{ color: '#00e5ff', fontSize: 13, letterSpacing: 1 }}>{statusText}</span>
+        </div>
+        <div style={{ marginTop: 35, width: 320, height: 6, background: 'rgba(255,255,255,0.05)', borderRadius: 10, overflow: 'hidden', position: 'relative' }}>
+          <div style={{ height: '100%', width: `${progress}%`, background: 'linear-gradient(90deg, #8c82f2, #00e5ff, #fff)', borderRadius: 10, transition: 'width 0.3s ease', boxShadow: '0 0 20px #00e5ff' }}></div>
+        </div>
+        <div style={{ marginTop: 12, color: '#8a8d9e', fontSize: 12, letterSpacing: 3 }}>SYS_LOAD: {Math.floor(progress)}%</div>
+      </div>
+    </div>
+  );
+}
+
 // ─── MAIN COMPONENT ───
 function Admin() {
   const [logs, setLogs] = useState([]);
@@ -501,13 +583,8 @@ function Admin() {
   };
 
   // ─── RENDER GUARDS ───
-  if (authLoading) return (
-    <div className={styles.adminLoading}>
-      <div className={styles.spinner}></div>
-      <h2>Checking Admin Credentials... 🛡️</h2>
-    </div>
-  );
-
+  if (authLoading) return <LoadingScreen message="Verifying Admin..." />;
+  
   if (!isAdmin) return (
     <div className={styles.adminLoading} style={{ background:'#0b0a14', flexDirection:'column' }}>
       <div style={{ fontSize:'70px', marginBottom:'10px' }}>🚫</div>
@@ -522,12 +599,7 @@ function Admin() {
     </div>
   );
 
-  if (loading) return (
-    <div className={styles.adminLoading}>
-      <div className={styles.spinner}></div>
-      <h2>Loading Control Center... ⏳</h2>
-    </div>
-  );
+  if (loading) return <LoadingScreen message="Loading Admin..." />;
 
   // ─── NAV COMPONENTS ───
   const NavSection = ({ label, children }) => (
