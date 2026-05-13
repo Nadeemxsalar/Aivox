@@ -476,3 +476,46 @@
 .loveColor { 
   color: #ff1493 !important; 
 }
+/* ─── MARKDOWN STYLES FOR ADMIN CHAT ─── */
+.markdownBody {
+  word-break: break-word;
+}
+.markdownBody p {
+  margin-bottom: 12px;
+  line-height: 1.6;
+}
+.markdownBody p:last-child {
+  margin-bottom: 0;
+}
+.markdownBody strong {
+  font-weight: 700;
+  color: inherit;
+}
+.markdownBody ul, 
+.markdownBody ol {
+  padding-left: 20px;
+  margin-bottom: 14px;
+}
+.markdownBody li {
+  margin-bottom: 6px;
+  line-height: 1.6;
+}
+.markdownBody li:last-child {
+  margin-bottom: 0;
+}
+.markdownBody a {
+  color: #00e5ff;
+  text-decoration: underline;
+  font-weight: 600;
+}
+.markdownBody code {
+  font-family: 'Fira Code', 'Consolas', monospace;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.markdownBody pre code {
+  background: transparent !important;
+  padding: 0;
+}

@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { collection, getDocs, query, orderBy, doc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
+import ReactMarkdown from 'react-markdown';
 import styles from './Admin.module.css';
 
 // ─── HELPERS ───
@@ -1346,7 +1347,7 @@ function Admin() {
         )}
 
         {/* ══════════════════════════════════════════
-            USER CHATS (🔥 NOW WITH ALIAS TRACKING 🔥)
+            USER CHATS (🔥 NOW WITH ALIAS TRACKING & MARKDOWN 🔥)
         ══════════════════════════════════════════ */}
         {activeTab === 'chats' && (
           <div className={styles.sectionFadeIn} style={{ height:'100%', overflow:'hidden' }}>
@@ -1443,7 +1444,7 @@ function Admin() {
                                   </div>
                                 )}
 
-                                {log.prompt}
+                                <div style={{ whiteSpace: 'pre-wrap' }}>{log.prompt}</div>
                                 <span className={styles.bubbleTime}>
                                   {new Date(log.timestamp).toLocaleDateString('en-IN', { day:'2-digit', month:'short' })}
                                   {' '}
@@ -1464,7 +1465,41 @@ function Admin() {
                                   </div>
                                 )}
 
-                                <div>{log.response}</div>
+                                <div className={styles.markdownBody}>
+                                  <ReactMarkdown
+                                    components={{
+                                      pre({node, children, ...props}) {
+                                        const extractText = (child) => {
+                                          if (typeof child === 'string') return child;
+                                          if (Array.isArray(child)) return child.map(extractText).join('');
+                                          if (child && child.props && child.props.children) return extractText(child.props.children);
+                                          return '';
+                                        };
+                                        const codeString = extractText(children);
+                                        
+                                        return (
+                                          <div style={{ background: '#0b0a14', borderRadius: '10px', border: '1px solid #2a2a40', overflow: 'hidden', margin: '12px 0', boxShadow: '0 4px 15px rgba(0,0,0,0.2)' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#151426', padding: '6px 12px', borderBottom: '1px solid #2a2a40' }}>
+                                              <span style={{ fontSize: '10px', color: '#8a8d9e', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Terminal / Code</span>
+                                              <button 
+                                                onClick={() => { navigator.clipboard.writeText(codeString); alert("Code Copied!"); }}
+                                                style={{ background: 'transparent', border: 'none', color: '#8c82f2', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 'bold', padding: 0 }}
+                                              >
+                                                <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                                Copy
+                                              </button>
+                                            </div>
+                                            <pre {...props} style={{ margin: 0, padding: '12px', background: 'transparent', overflowX: 'auto', fontSize: '12px', color: '#cdd6f4' }}>
+                                              {children}
+                                            </pre>
+                                          </div>
+                                        );
+                                      }
+                                    }}
+                                  >
+                                    {log.response}
+                                  </ReactMarkdown>
+                                </div>
                                 
                                 <div className={styles.bubbleFooter}>
                                   <span className={styles.bubbleModel}>{log.model}</span>
