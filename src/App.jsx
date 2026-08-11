@@ -892,7 +892,7 @@ function App() {
             <div className="header-info right-aligned">
               <div className="header-text">
                 <h1 style={isLoveMode ? {textShadow: '0 4px 15px rgba(255, 77, 133, 0.4)'} : {}}>Aivox</h1>
-                <p>By <strong>Nadeem</strong></p>
+              {/*  <p>By <strong>Nadeem</strong></p> */}
               </div>
               <img src="/logo.svg" alt="Aivox Logo" className="header-logo" />
             </div>
