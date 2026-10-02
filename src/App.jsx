@@ -8,6 +8,71 @@ import { auth } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import './App.css';
 
+// ===== AI HELPERS START (Oct 2026 fix) =====
+
+// 🔧 GitHub Models was permanently shut down by GitHub on 30 Jul 2026.
+// The old endpoint (models.inference.ai.azure.com) no longer resolves (ERR_NAME_NOT_RESOLVED).
+// Code is kept below, but disabled so it doesn't waste time / spam the console on every message.
+const GITHUB_MODELS_ENABLED = false;
+
+// 🔧 Updated model names (the old ones were retired by their providers)
+const GROQ_TEXT_MODEL = 'openai/gpt-oss-20b';      // old: llama-3.1-8b-instant (retired 16 Aug 2026)
+const GROQ_VISION_MODEL = 'qwen/qwen3.8-27b';      // old: llama-3.2-11b-vision-preview (retired Apr 2025)
+const GEMINI_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.8-flash']; // old: gemini-1.5-flash (retired)
+const OPENROUTER_MODEL = 'openrouter/free';        // old: meta-llama/llama-3.x-instruct:free (removed). Router auto-picks a working free model (text + vision)
+
+// Failed "⚠️ Unable to connect" bubbles and empty messages should never be sent back to the AI as context
+const isUsableHistoryMsg = (msg) =>
+  msg && typeof msg.text === 'string' && msg.text.trim() !== '' && !msg.text.startsWith('⚠️ Unable to connect');
+
+const toOpenAIHistory = (history) => {
+  const cleaned = [];
+  for (const msg of (history || []).filter(isUsableHistoryMsg)) {
+    const role = msg.role === 'ai' ? 'assistant' : 'user';
+    const last = cleaned[cleaned.length - 1];
+    if (last && last.role === role) {
+      last.content += '\n' + msg.text; // some providers reject two same-role messages in a row
+    } else {
+      cleaned.push({ role, content: msg.text });
+    }
+  }
+  return cleaned;
+};
+
+// 🔧 Gemini rule: history must START with 'user' and strictly alternate user/model.
+// (The default "Hello! Main Aivox hoon" greeting is an AI message, which caused:
+//  "First content should be with role 'user', got model")
+// Returns { history, carry }. 'carry' = any unanswered user text sitting at the very end of the history
+// (e.g. a message whose request failed). It can't live in the history right before the new user message,
+// so it is added in front of the outgoing message instead of being thrown away.
+const toGeminiHistory = (history) => {
+  const cleaned = [];
+  for (const msg of (history || []).filter(isUsableHistoryMsg)) {
+    const role = msg.role === 'ai' ? 'model' : 'user';
+    const last = cleaned[cleaned.length - 1];
+    if (last && last.role === role) {
+      last.parts[0].text += '\n' + msg.text;
+    } else {
+      cleaned.push({ role, parts: [{ text: msg.text }] });
+    }
+  }
+  while (cleaned.length && cleaned[0].role !== 'user') cleaned.shift();
+  let carry = '';
+  while (cleaned.length && cleaned[cleaned.length - 1].role !== 'model') {
+    carry = cleaned.pop().parts[0].text + (carry ? '\n' + carry : '');
+  }
+  return { history: cleaned, carry };
+};
+
+// Throws if the model returned an empty reply, so the next provider in the chain gets tried
+const extractReply = (data) => {
+  const text = data?.choices?.[0]?.message?.content;
+  if (!text || !String(text).trim()) throw new Error('Empty response from model');
+  return text;
+};
+
+// ===== AI HELPERS END =====
+
 function App() {
   const [authUser, setAuthUser] = useState(null);
   const [guestName, setGuestName] = useState(localStorage.getItem('aivox_guest_name') || '');
@@ -331,8 +396,11 @@ function App() {
     const startTime = Date.now(); 
 
     try {
+      // 🔧 GitHub Models is retired (30 Jul 2026) -> skipped automatically while GITHUB_MODELS_ENABLED = false
+      if (!GITHUB_MODELS_ENABLED) throw new Error("GitHub Models retired by GitHub on 30 Jul 2026 - skipped");
+
       const smartHistory = getRelevantHistory(textToProcess, messages);
-      const formattedHistory = smartHistory.map(msg => ({ role: msg.role === 'ai' ? 'assistant' : 'user', content: msg.text }));
+      const formattedHistory = toOpenAIHistory(smartHistory);
       const userMessage = buildOpenAIVisionMessage(textToProcess, imagePart);
       
       const githubApiKey = import.meta.env.VITE_GITHUB_TOKEN;
@@ -342,7 +410,7 @@ function App() {
       });
       if (!ghResponse.ok) throw new Error("GitHub API failed");
       const ghData = await ghResponse.json();
-      finalResponse = ghData.choices[0].message.content;
+      finalResponse = extractReply(ghData);
       finalModel = imagePart ? "GPT-4o-mini Vision (GitHub)" : "GPT-4o-mini (GitHub)";
       
     } catch (githubError) {
@@ -350,81 +418,100 @@ function App() {
       try {
         if (imagePart) throw new Error("Skipping Mistral for Image/Vision support");
         const smartHistory = getRelevantHistory(textToProcess, messages);
-        const formattedHistory = smartHistory.map(msg => ({ role: msg.role === 'ai' ? 'assistant' : 'user', content: msg.text }));
+        const formattedHistory = toOpenAIHistory(smartHistory);
         
         const mistralResponse = await fetch("https://api.mistral.ai/v1/chat/completions", {
             method: "POST", headers: { "Authorization": `Bearer ${mistralApiKey}`, "Content-Type": "application/json" },
             body: JSON.stringify({ model: "mistral-small-latest", messages: [{ role: "system", content: systemPrompt }, ...formattedHistory, { role: "user", content: textToProcess }], max_tokens: 250, temperature: isActuallyRoasting ? 0.8 : 0.4 })
         });
-        if (!mistralResponse.ok) throw new Error("Mistral API failed");
+        if (!mistralResponse.ok) throw new Error(`Mistral API failed (status ${mistralResponse.status})`);
         const mistralData = await mistralResponse.json();
-        finalResponse = mistralData.choices[0].message.content;
+        finalResponse = extractReply(mistralData);
         finalModel = "Mistral-Small";
 
       } catch (mistralError) {
         console.log("Mistral failed, trying Groq...", mistralError.message);
         try {
           const smartHistory = getRelevantHistory(textToProcess, messages);
-          const formattedHistory = smartHistory.map(msg => ({ role: msg.role === 'ai' ? 'assistant' : 'user', content: msg.text }));
+          const formattedHistory = toOpenAIHistory(smartHistory);
           const userMessage = buildOpenAIVisionMessage(textToProcess, imagePart);
-          const groqModel = imagePart ? "llama-3.2-11b-vision-preview" : "llama-3.1-8b-instant";
+          
+          // 🔧 New Groq models. Both are "reasoning" models, so reasoning is kept minimal and a bigger token budget is used
+          // (reasoning tokens count towards the limit; 250 would cut the answer off / return empty).
+          const groqModelConfig = imagePart
+            ? { model: GROQ_VISION_MODEL, reasoning_effort: "none", max_completion_tokens: 400 }
+            : { model: GROQ_TEXT_MODEL, reasoning_effort: "low", include_reasoning: false, max_completion_tokens: 1024 };
           
           const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
             method: "POST", headers: { "Authorization": `Bearer ${groqApiKey}`, "Content-Type": "application/json" },
-            body: JSON.stringify({ model: groqModel, messages: [{ role: "system", content: systemPrompt }, ...formattedHistory, userMessage], max_tokens: 250, temperature: isActuallyRoasting ? 0.8 : 0.4 })
+            body: JSON.stringify({ ...groqModelConfig, messages: [{ role: "system", content: systemPrompt }, ...formattedHistory, userMessage], temperature: isActuallyRoasting ? 0.8 : 0.4 })
           });
-          if (!groqResponse.ok) throw new Error("Groq API Limit/Failed");
+          if (!groqResponse.ok) throw new Error(`Groq API Limit/Failed (status ${groqResponse.status})`);
           const groqData = await groqResponse.json();
-          finalResponse = groqData.choices[0].message.content;
-          finalModel = imagePart ? "Llama-Vision (Groq)" : "Llama-3.1 (Groq)";
+          finalResponse = extractReply(groqData);
+          finalModel = imagePart ? "Qwen3.8-Vision (Groq)" : "GPT-OSS-20B (Groq)";
 
         } catch (groqError) {
           console.log("Groq failed, trying Gemini...", groqError.message);
           try {
             const genAI = new GoogleGenerativeAI(geminiApiKey);
-            const model = genAI.getGenerativeModel({ 
-              model: 'gemini-1.5-flash', 
-              systemInstruction: systemPrompt, 
-              generationConfig: { maxOutputTokens: 250, temperature: isActuallyRoasting ? 0.8 : 0.4 },
-              safetySettings: [
-                { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-                { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-              ]
-            });
 
+            // 🔧 Gemini history must start with a 'user' message and alternate user/model
             const smartHistory = getRelevantHistory(textToProcess, messages);
-            const geminiHistory = smartHistory.map(msg => ({
-              role: msg.role === 'ai' ? 'model' : 'user',
-              parts: [{ text: msg.text }],
-            }));
+            const { history: geminiHistory, carry: geminiCarry } = toGeminiHistory(smartHistory);
+            const geminiOutgoingText = geminiCarry ? `${geminiCarry}\n${textToProcess}` : textToProcess;
+            const messageParts = imagePart ? [geminiOutgoingText || "Explain this image.", imagePart] : [geminiOutgoingText];
 
-            const chat = model.startChat({ history: geminiHistory });
-            const messageParts = imagePart ? [textToProcess || "Explain this image.", imagePart] : [textToProcess];
-            
-            const result = await chat.sendMessage(messageParts);
-            finalResponse = result.response.text();
-            finalModel = imagePart ? "Gemini Vision" : "Gemini";
+            // 🔧 Try the new Gemini models one by one (old gemini-1.5-flash is gone)
+            let geminiLastError = null;
+            for (const geminiModelName of GEMINI_MODELS) {
+              try {
+                const model = genAI.getGenerativeModel({ 
+                  model: geminiModelName, 
+                  systemInstruction: systemPrompt, 
+                  generationConfig: { maxOutputTokens: 1024, temperature: isActuallyRoasting ? 0.8 : 0.4 },
+                  safetySettings: [
+                    { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                    { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+                    { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                    { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                  ]
+                });
+
+                const chat = model.startChat({ history: geminiHistory });
+                const result = await chat.sendMessage(messageParts);
+                const geminiText = result.response.text();
+                if (!geminiText || !geminiText.trim()) throw new Error("Empty Gemini response");
+
+                finalResponse = geminiText;
+                finalModel = imagePart ? "Gemini Vision" : "Gemini";
+                geminiLastError = null;
+                break;
+              } catch (singleGeminiError) {
+                geminiLastError = singleGeminiError;
+                console.log(`Gemini model ${geminiModelName} failed...`, singleGeminiError.message);
+              }
+            }
+            if (geminiLastError) throw geminiLastError;
 
           } catch (geminiError) {
             console.log("Gemini failed, trying OpenRouter as Last Resort...", geminiError.message);
             try {
                 const smartHistory = getRelevantHistory(textToProcess, messages);
-                const formattedHistory = smartHistory.map(msg => ({ role: msg.role === 'ai' ? 'assistant' : 'user', content: msg.text }));
+                const formattedHistory = toOpenAIHistory(smartHistory);
                 const userMessage = buildOpenAIVisionMessage(textToProcess, imagePart);
-                const orModel = imagePart ? "meta-llama/llama-3.2-11b-vision-instruct:free" : "meta-llama/llama-3.1-8b-instruct:free";
                 
+                // 🔧 'openrouter/free' auto-selects a currently available free model (and one that supports images if needed)
                 const orResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
                     method: "POST", headers: { "Authorization": `Bearer ${openRouterApiKey}`, "Content-Type": "application/json", "HTTP-Referer": "https://aivoxpro.co.in", "X-Title": "Aivox Pro" },
-                    body: JSON.stringify({ model: orModel, messages: [{ role: "system", content: systemPrompt }, ...formattedHistory, userMessage], max_tokens: 250, temperature: isActuallyRoasting ? 0.8 : 0.4 })
+                    body: JSON.stringify({ model: OPENROUTER_MODEL, messages: [{ role: "system", content: systemPrompt }, ...formattedHistory, userMessage], max_tokens: 1000, temperature: isActuallyRoasting ? 0.8 : 0.4 })
                 });
-                if (!orResponse.ok) throw new Error("OpenRouter API limits reached");
+                if (!orResponse.ok) throw new Error(`OpenRouter API limits reached (status ${orResponse.status})`);
                 const orData = await orResponse.json();
                 
                 if (orData.choices && orData.choices[0]) {
-                  finalResponse = orData.choices[0].message.content;
-                  finalModel = imagePart ? "Llama-Vision (OpenRouter)" : "Llama-3.1 (OpenRouter)";
+                  finalResponse = extractReply(orData);
+                  finalModel = imagePart ? "Free Router Vision (OpenRouter)" : "Free Router (OpenRouter)";
                 } else {
                   throw new Error("Invalid OpenRouter Response");
                 }
