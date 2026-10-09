@@ -73,6 +73,70 @@ const extractReply = (data) => {
 
 // ===== AI HELPERS END =====
 
+// ===== CHAT HISTORY HELPERS START =====
+// 🗂️ Har mode ki apni alag chat history (localStorage key).
+// Normal mode purani key 'aivox_chat_history' hi use karta hai, taaki purani chat safe rahe.
+const CHAT_KEYS = {
+  smart: 'aivox_chat_history',
+  savage: 'aivox_roaster_chat_history',
+  corporate: 'aivox_corporate_chat_history',
+  genz: 'aivox_genz_chat_history',
+  lover_girl: 'aivox_gf_chat_history',
+  lover_boy: 'aivox_bf_chat_history',
+};
+const LEGACY_LOVE_KEY = 'aivox_love_chat_history';      // purani (gf + bf mixed) love chat
+const LOVE_MIGRATED_FLAG = 'aivox_love_chat_migrated';
+
+const getChatKey = (ego) => CHAT_KEYS[ego] || CHAT_KEYS.smart;
+
+// Storage full ho jaye toh app crash na ho: pehle poori chat save karo, nahi toh photos hata ke
+const saveChatSafely = (key, msgs) => {
+  try {
+    localStorage.setItem(key, JSON.stringify(msgs));
+  } catch {
+    try {
+      localStorage.setItem(key, JSON.stringify(msgs.map((m) => ({ ...m, image: null }))));
+    } catch (err) {
+      console.error('Chat save failed', err);
+    }
+  }
+};
+
+// Reply aane se pehle user ne mode badal diya ho toh reply uski original chat mein hi jodo
+const appendToSavedChat = (key, msg) => {
+  try {
+    const arr = JSON.parse(localStorage.getItem(key) || '[]');
+    if (Array.isArray(arr)) saveChatSafely(key, [...arr, msg]);
+  } catch (err) {
+    console.error('Append to saved chat failed', err);
+  }
+};
+
+// Saved chat padho. Kuch nahi mila / kharab data mila -> null (caller default greeting dikhayega)
+const readSavedChat = (ego) => {
+  try {
+    const key = getChatKey(ego);
+    let saved = localStorage.getItem(key);
+
+    // One-time: purani mixed love chat ko pehle khulne wale love mode (gf ya bf) mein le aao
+    if (!saved && (ego === 'lover_girl' || ego === 'lover_boy')) {
+      const legacy = localStorage.getItem(LEGACY_LOVE_KEY);
+      if (legacy && !localStorage.getItem(LOVE_MIGRATED_FLAG)) {
+        localStorage.setItem(LOVE_MIGRATED_FLAG, ego);
+        saved = legacy;
+        try { localStorage.setItem(key, legacy); } catch { /* storage full: abhi sirf dikhao */ }
+      }
+    }
+
+    if (!saved) return null;
+    const parsed = JSON.parse(saved);
+    return Array.isArray(parsed) && parsed.length ? parsed : null;
+  } catch {
+    return null;
+  }
+};
+// ===== CHAT HISTORY HELPERS END =====
+
 function App() {
   const [authUser, setAuthUser] = useState(null);
   const [guestName, setGuestName] = useState(localStorage.getItem('aivox_guest_name') || '');
@@ -112,19 +176,20 @@ function App() {
 
   const getCurrentTime = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+  // 🗂️ Abhi screen par jo chat hai wo kis localStorage key ki hai (mode badalte hi ye badalta hai)
+  const chatKeyRef = useRef(getChatKey(localStorage.getItem('aivox_alter_ego') || 'smart'));
+
+  // Naye / khaali mode ki default greeting wali chat
+  const buildDefaultChat = (ego) => {
+    const defaultGreeting = ego === 'lover_girl' ? 'Kaise ho babu? ❤️'
+      : ego === 'lover_boy' ? 'Kaisi ho meri jaan? ❤️'
+      : 'Hello! Main **Aivox** hoon. Main aapki kya madad kar sakta hoon? ✨';
+    return [{ id: Date.now(), role: 'ai', text: defaultGreeting, image: null, time: getCurrentTime(), isBookmarked: false }];
+  };
+
   const [messages, setMessages] = useState(() => {
     const initialEgo = localStorage.getItem('aivox_alter_ego') || 'smart';
-    const isInitiallyLove = initialEgo === 'lover_girl' || initialEgo === 'lover_boy';
-    const storageKey = isInitiallyLove ? 'aivox_love_chat_history' : 'aivox_chat_history';
-    
-    const savedChats = localStorage.getItem(storageKey);
-    if (savedChats) return JSON.parse(savedChats);
-    
-    const defaultGreeting = isInitiallyLove 
-      ? (initialEgo === 'lover_girl' ? 'Kaise ho babu? ❤️' : 'Kaisi ho meri jaan? ❤️')
-      : 'Hello! Main **Aivox** hoon. Main aapki kya madad kar sakta hoon? ✨';
-      
-    return [{ id: Date.now(), role: 'ai', text: defaultGreeting, image: null, time: getCurrentTime(), isBookmarked: false }];
+    return readSavedChat(initialEgo) || buildDefaultChat(initialEgo);
   });
 
   const [loading, setLoading] = useState(false);
@@ -181,19 +246,10 @@ function App() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // 🗂️ Mode ki apni chat load karo (nahi mili toh default greeting)
   const loadChatHistory = (newEgo) => {
-    const checkLoveMode = newEgo === 'lover_girl' || newEgo === 'lover_boy';
-    const storageKey = checkLoveMode ? 'aivox_love_chat_history' : 'aivox_chat_history';
-    const savedChats = localStorage.getItem(storageKey);
-    
-    if (savedChats) {
-      setMessages(JSON.parse(savedChats));
-    } else {
-      const defaultGreeting = checkLoveMode 
-        ? (newEgo === 'lover_girl' ? 'Kaise ho babu? ❤️' : 'Kaisi ho meri jaan? ❤️') 
-        : 'Hello! Main **Aivox** hoon. Main aapki kya madad kar sakta hoon? ✨';
-      setMessages([{ id: Date.now(), role: 'ai', text: defaultGreeting, image: null, time: getCurrentTime(), isBookmarked: false }]);
-    }
+    chatKeyRef.current = getChatKey(newEgo);
+    setMessages(readSavedChat(newEgo) || buildDefaultChat(newEgo));
   };
 
   useEffect(() => {
@@ -209,10 +265,10 @@ function App() {
     return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
+  // 🗂️ Chat hamesha usi mode ki key mein save hoti hai jiski wo hai (chatKeyRef)
   useEffect(() => { 
-    const storageKey = isLoveMode ? 'aivox_love_chat_history' : 'aivox_chat_history';
-    localStorage.setItem(storageKey, JSON.stringify(messages)); 
-  }, [messages, isLoveMode]);
+    saveChatSafely(chatKeyRef.current, messages);
+  }, [messages]);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, loading]);
 
@@ -357,6 +413,7 @@ function App() {
       localStorage.setItem('aivox_guest_msg_count', (msgCount + 1).toString());
     }
 
+    const chatKeyAtStart = chatKeyRef.current; // 🗂️ ye message kis mode ki chat ka hai
     const imagePart = selectedImageBase64; 
     let userBase64Image = null;
 
@@ -526,7 +583,13 @@ function App() {
       }
     } finally {
       const timeTakenMs = Date.now() - startTime; 
-      setMessages(prev => [...prev, { id: Date.now(), role: 'ai', text: finalResponse, image: null, time: getCurrentTime(), isBookmarked: false }]);
+      const replyMsg = { id: Date.now(), role: 'ai', text: finalResponse, image: null, time: getCurrentTime(), isBookmarked: false };
+      if (chatKeyRef.current === chatKeyAtStart) {
+        setMessages(prev => [...prev, replyMsg]);
+      } else {
+        // 🗂️ Reply aane se pehle user ne mode badal diya -> reply us mode ki apni chat mein save hoga
+        appendToSavedChat(chatKeyAtStart, replyMsg);
+      }
       setLoading(false);
       setTimeout(() => inputRef.current?.focus(), 100);
       
@@ -626,13 +689,12 @@ function App() {
       isLoveMsg: isLoveMode
     });
 
-    const storageKey = isLoveMode ? 'aivox_love_chat_history' : 'aivox_chat_history';
     const defaultGreeting = isLoveMode 
       ? (activeEgo === 'lover_girl' ? 'Hmm... kya kar rahe ho ab? 🥺' : 'Bolo jaan, kya chal raha hai? ❤️') 
       : 'Chat cleared! ✨';
     const resetMsg = [{ id: Date.now(), role: 'ai', text: defaultGreeting, image: null, time: getCurrentTime(), isBookmarked: false }];
     setMessages(resetMsg); 
-    localStorage.setItem(storageKey, JSON.stringify(resetMsg)); 
+    saveChatSafely(chatKeyRef.current, resetMsg); 
     showToast("Chat Cleared 🗑️");
     setShowClearModal(false); 
   };

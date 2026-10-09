@@ -1,20 +1,20 @@
 // ============================================================
-//  SMART MEMORY v2.1 — FREE API OPTIMIZED
+//  SMART MEMORY v2.2 — FREE API OPTIMIZED (Fixed for Hinglish)
 //  1000 tokens/min rate limit ke liye tuned
 //  4 msgs/min avg → ~500 tokens context budget per call
 // ============================================================
 
 // ─── CONFIG ─────────────────────────────────────────────────
 const CFG = {
-  TOKEN_BUDGET:       110,   // Context tokens max — free API safe
-  HARD_LIMIT:         160,   // Kabhi bhi is se zyada mat bhejo
+  TOKEN_BUDGET:       150,   // Thoda sa budget badhaya taaki context theek rahe
+  HARD_LIMIT:         200,   // Kabhi bhi is se zyada mat bhejo
 
   RECENT_WINDOW:      3,     // Last N messages ALWAYS include
   MAX_OLD_ANCHORS:    1,     // Purane anchor messages max
   MAX_OLD_RELEVANT:   1,     // Purane relevant messages max
 
   COMPRESS_AT:        100,   // Itne chars se lamba = compress
-  COMPRESS_TO:        60,   // Compress target chars
+  COMPRESS_TO:        60,    // Compress target chars
 
   SCORE_KEYWORD:      4,
   SCORE_ENTITY:       3,
@@ -24,7 +24,8 @@ const CFG = {
 };
 
 // ─── TOKEN ESTIMATOR ─────────────────────────────────────────
-const estimateTokens = (text = "") => Math.ceil(text.length / 3.5);
+// (Fixed for Hinglish and Emojis)
+const estimateTokens = (text = "") => Math.ceil(text.length / 2.5);
 
 // ─── FAST HASH ───────────────────────────────────────────────
 const hashStr = (str = "") => {
@@ -37,21 +38,16 @@ const hashStr = (str = "") => {
 };
 
 // ─── AGGRESSIVE COMPRESSOR ───────────────────────────────────
+// (Fixed to not cut mid-sentence)
 const compress = (text = "") => {
   if (text.length <= CFG.COMPRESS_AT) return text;
-  const sentences = text.match(/[^.!?\n]+[.!?\n]*/g) || [text];
-  let result = sentences[0].trim();
-  for (let i = 1; i < sentences.length; i++) {
-    const s = sentences[i].trim();
-    if (s.includes("?") && result.length + s.length < CFG.COMPRESS_TO * 1.4) {
-      result += " " + s;
-      break;
-    }
+  const sliced = text.slice(0, CFG.COMPRESS_TO + 20); 
+  const match = sliced.match(/.*[.!?\n]/); 
+  if (match && match[0].length <= CFG.COMPRESS_TO + 10) {
+    return match[0].trim() + "…";
   }
-  if (result.length <= CFG.COMPRESS_TO) return result;
-  const sliced = result.slice(0, CFG.COMPRESS_TO);
-  const lastSpace = sliced.lastIndexOf(" ");
-  return (lastSpace > CFG.COMPRESS_TO * 0.6 ? sliced.slice(0, lastSpace) : sliced) + "…";
+  const lastSpace = sliced.slice(0, CFG.COMPRESS_TO).lastIndexOf(" ");
+  return (lastSpace > 10 ? sliced.slice(0, lastSpace) : sliced.slice(0, CFG.COMPRESS_TO)) + "…";
 };
 
 // ─── STOPWORDS ───────────────────────────────────────────────
@@ -67,14 +63,17 @@ const STOP = new Set([
 ]);
 
 // ─── KEYWORD + ENTITY EXTRACT ────────────────────────────────
-const extractKeywords = (text = "") =>
+export const extractKeywords = (text = "") =>
   text.toLowerCase().replace(/[^\w\s]/g, " ").split(/\s+/)
     .filter(w => w.length > 3 && !STOP.has(w));
 
+// (Fixed regex to catch normal words too)
 const extractEntities = (text = "") => {
   const e = new Set();
-  (text.match(/\b[A-Z][a-z]{2,}\b/g) || []).forEach(x => e.add(x.toLowerCase()));
-  (text.match(/\b[a-z]+(?:[A-Z][a-z]+)+\b|\b[a-z]+_[a-z_]+\b/g) || []).forEach(x => e.add(x));
+  (text.match(/\b[a-zA-Z0-9_]{3,}\b/g) || []).forEach(x => {
+    const lower = x.toLowerCase();
+    if (!STOP.has(lower)) e.add(lower);
+  });
   return e;
 };
 
@@ -157,11 +156,17 @@ export const getRelevantHistory = (currentPrompt = "", allMessages = []) => {
   return applyBudget(unique);
 };
 
+// ─── AICONFIG CRASH FIX ──────────────────────────────────────
+// (Ye aiconfig.js me import hota hai, isliye iska hona zaroori hai varna app crash hogi)
+export const buildEarlierDigest = () => {
+  return ""; 
+};
+
 // ─── DEBUG (sirf development mein use karo) ──────────────────
 export const debugMemory = (currentPrompt, allMessages) => {
   const result = getRelevantHistory(currentPrompt, allMessages);
   const tokens  = result.reduce((s, m) => s + estimateTokens(m.text), 0);
-  console.group("Smart Memory v2.1 — Free API Mode");
+  console.group("Smart Memory v2.2 — Free API Mode");
   console.log(`Messages: ${result.length} | Tokens: ${tokens}/${CFG.TOKEN_BUDGET} (${((tokens/CFG.TOKEN_BUDGET)*100).toFixed(1)}%)`);
   console.table(result.map((m, i) => ({
     "#": i+1, role: m.role, chars: m.text.length,
