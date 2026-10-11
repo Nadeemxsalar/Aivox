@@ -1,5 +1,6 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
-import { collection, getDocs, query, orderBy, doc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { useEffect, useState, useRef, useCallback, memo, forwardRef, useImperativeHandle } from 'react';
+import { createPortal } from 'react-dom';
+import { collection, getDocs, query, orderBy, doc, deleteDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import ReactMarkdown from 'react-markdown';
@@ -226,6 +227,458 @@ function LoadingScreen({ message = 'System Initializing...' }) {
   );
 }
 
+// ═══════════════════════════════════════════════════════════
+// 🆕 NEW: DATE & TIME HELPERS (User Accounts)
+// ═══════════════════════════════════════════════════════════
+const toDateObj = (v) => {
+  if (v === null || v === undefined || v === '') return null;
+  let d = null;
+  if (v instanceof Date) d = v;
+  else if (typeof v.toDate === 'function') d = v.toDate();                              // Firestore Timestamp
+  else if (typeof v === 'object' && typeof v.seconds === 'number') d = new Date(v.seconds * 1000);
+  else if (typeof v === 'object' && typeof v._seconds === 'number') d = new Date(v._seconds * 1000);
+  else if (typeof v === 'number') d = new Date(v < 1e12 ? v * 1000 : v);
+  else if (typeof v === 'string' && /^\d{10,13}$/.test(v)) { const n = Number(v); d = new Date(n < 1e12 ? n * 1000 : n); }
+  else d = new Date(v);
+  return d && !isNaN(d.getTime()) ? d : null;
+};
+
+// Signup / last-login field names jo aksar Firestore users docs mein hote hain
+const getJoinedValue = (u) => u.createdAt ?? u.created_at ?? u.joinedAt ?? u.joined ?? u.registeredAt ?? u.signupAt ?? u.signupTime ?? u.timestamp ?? u.metadata?.creationTime ?? null;
+const getLastLoginValue = (u) => u.lastLogin ?? u.lastLoginAt ?? u.last_login ?? u.lastSignInTime ?? u.lastActive ?? u.metadata?.lastSignInTime ?? null;
+
+function DateTimeCell({ value, note }) {
+  const d = toDateObj(value);
+  if (!d) return <span style={{ color: '#555', fontSize: 12 }}>N/A</span>;
+  return (
+    <div style={{ lineHeight: 1.5, whiteSpace: 'nowrap' }}>
+      <div style={{ color: '#e6e6fa', fontSize: 12, fontWeight: 600 }}>
+        {d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+      </div>
+      <div style={{ color: '#8a8d9e', fontSize: 11 }}>
+        {d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
+        {note ? <span style={{ color: '#6a6b8c' }}> • {note}</span> : null}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// 🆕 NEW: SMALL UI PIECES (icons, copy helper)
+// ═══════════════════════════════════════════════════════════
+const copyText = async (text) => {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (e) {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      return ok;
+    } catch (err) { return false; }
+  }
+};
+
+const ICON_PATHS = {
+  expand:   <><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></>,
+  collapse: <><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></>,
+  trash:    <><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></>,
+  copy:     <><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></>,
+  message:  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>,
+  check:    <polyline points="20 6 9 17 4 12"/>,
+  alert:    <><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></>,
+};
+
+function Icon({ name, size = 18 }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" aria-hidden="true">
+      {ICON_PATHS[name]}
+    </svg>
+  );
+}
+
+function IconButton({ title, onClick, tone = 'default', children, size = 36 }) {
+  const [hover, setHover] = useState(false);
+  const danger = tone === 'danger';
+  return (
+    <button type="button" title={title} aria-label={title} onClick={onClick}
+      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      style={{
+        width: size, height: size, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        flexShrink: 0, cursor: 'pointer', borderRadius: 10, padding: 0,
+        color: danger ? '#ff6b6d' : '#cdd6f4',
+        background: hover ? (danger ? 'rgba(255,77,79,0.2)' : 'rgba(140,130,242,0.22)') : (danger ? 'rgba(255,77,79,0.08)' : 'rgba(255,255,255,0.05)'),
+        border: `1px solid ${hover ? (danger ? 'rgba(255,77,79,0.5)' : 'rgba(140,130,242,0.55)') : (danger ? 'rgba(255,77,79,0.28)' : 'rgba(255,255,255,0.1)')}`,
+        transition: 'background 0.15s ease, border-color 0.15s ease'
+      }}>
+      {children}
+    </button>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// 🆕 NEW: UI HOST — confirm popup + loader, message action sheet, toast
+// Imperative (ref) so popups open/close WITHOUT re-rendering the heavy Admin page => lag free.
+// ═══════════════════════════════════════════════════════════
+const UI_KEYFRAMES = `
+  @keyframes uiFade { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes uiPop { from { opacity: 0; transform: translateY(10px) scale(0.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
+  @keyframes uiSlideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  @keyframes uiSpin { to { transform: rotate(360deg); } }
+  @keyframes uiBar { 0% { transform: translateX(-100%); } 100% { transform: translateX(320%); } }
+  @keyframes uiToast { from { opacity: 0; transform: translate(-50%, 14px); } to { opacity: 1; transform: translate(-50%, 0); } }
+  @keyframes fsChatIn { from { opacity: 0; } to { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { .ui-motion { animation: none !important; } }
+`;
+
+const UiHost = forwardRef(function UiHost(_props, ref) {
+  const [dialog, setDialog] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [dialogError, setDialogError] = useState('');
+  const [sheet, setSheet] = useState(null);
+  const [toast, setToast] = useState(null);
+  const openedAt = useRef(0);
+  const busyRef = useRef(false);
+  const toastTimer = useRef(null);
+
+  const showToast = useCallback((text, type = 'success') => {
+    clearTimeout(toastTimer.current);
+    setToast({ text, type, id: Date.now() });
+    toastTimer.current = setTimeout(() => setToast(null), 2600);
+  }, []);
+
+  useImperativeHandle(ref, () => ({
+    confirm: (opts) => {
+      openedAt.current = Date.now();
+      busyRef.current = false;
+      setBusy(false);
+      setDialogError('');
+      setDialog(opts);
+    },
+    sheet: (opts) => {
+      openedAt.current = Date.now();
+      setSheet(opts);
+    },
+    toast: showToast,
+  }), [showToast]);
+
+  useEffect(() => () => clearTimeout(toastTimer.current), []);
+
+  const closeDialog = useCallback(() => { if (!busyRef.current) setDialog(null); }, []);
+  const closeSheet = useCallback(() => setSheet(null), []);
+
+  // Esc key closes popups (capture so it doesn't also exit full screen chat)
+  useEffect(() => {
+    if (!dialog && !sheet) return;
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      if (dialog) closeDialog(); else closeSheet();
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [dialog, sheet, closeDialog, closeSheet]);
+
+  // Long-press ke baad aane wale phantom tap ko ignore karne ke liye
+  const guard = () => Date.now() - openedAt.current < 350;
+
+  const runConfirm = async () => {
+    if (!dialog || busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    setDialogError('');
+    try {
+      await dialog.onConfirm();
+      setDialog(null);
+      if (dialog.successMsg) showToast(dialog.successMsg, 'success');
+    } catch (err) {
+      console.error('Delete failed:', err);
+      setDialogError(err?.message || 'Something went wrong. Please try again.');
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  };
+
+  if (typeof document === 'undefined') return null;
+  const wide = typeof window !== 'undefined' && window.innerWidth > 600;
+
+  return createPortal(
+    <>
+      <style>{UI_KEYFRAMES}</style>
+
+      {/* ───── MESSAGE ACTION SHEET (long press) ───── */}
+      {sheet && (
+        <div onClick={() => { if (!guard()) closeSheet(); }}
+          style={{ position: 'fixed', inset: 0, zIndex: 10000000, background: 'rgba(5,5,10,0.65)', display: 'flex', alignItems: wide ? 'center' : 'flex-end', justifyContent: 'center', padding: wide ? 16 : 0, animation: 'uiFade 0.18s ease' }}>
+          <div className="ui-motion" onClick={(e) => e.stopPropagation()}
+            style={{ width: '100%', maxWidth: 420, background: '#151426', border: '1px solid #2a2a40', borderRadius: wide ? 20 : '20px 20px 0 0', padding: '12px 14px calc(14px + env(safe-area-inset-bottom, 0px))', boxShadow: '0 -10px 40px rgba(0,0,0,0.5)', animation: wide ? 'uiPop 0.2s ease' : 'uiSlideUp 0.24s cubic-bezier(0.2, 0.8, 0.2, 1)' }}>
+            {!wide && <div style={{ width: 38, height: 4, borderRadius: 4, background: 'rgba(255,255,255,0.18)', margin: '0 auto 12px' }} />}
+            <div style={{ padding: '2px 4px 10px' }}>
+              <div style={{ color: '#fff', fontWeight: 800, fontSize: 15 }}>{sheet.title}</div>
+              {sheet.meta && <div style={{ color: '#6a6b8c', fontSize: 11, marginTop: 3 }}>{sheet.meta}</div>}
+            </div>
+            {sheet.preview && (
+              <div style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10, padding: '9px 12px', marginBottom: 10, color: '#aab0c8', fontSize: 12.5, fontStyle: 'italic', lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', wordBreak: 'break-word' }}>
+                {sheet.preview}
+              </div>
+            )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {sheet.actions.map((a, i) => {
+                const danger = a.tone === 'danger';
+                return (
+                  <button key={i} type="button"
+                    onClick={() => { if (guard()) return; setSheet(null); if (a.onClick) a.onClick(); }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '13px 14px', borderRadius: 12, cursor: 'pointer', fontSize: 14, fontWeight: 700, textAlign: 'left',
+                      color: danger ? '#ff6b6d' : '#e6e6fa',
+                      background: danger ? 'rgba(255,77,79,0.1)' : 'rgba(255,255,255,0.04)',
+                      border: `1px solid ${danger ? 'rgba(255,77,79,0.3)' : 'rgba(255,255,255,0.07)'}` }}>
+                    <span style={{ display: 'flex' }}><Icon name={a.icon} size={18} /></span>
+                    {a.label}
+                  </button>
+                );
+              })}
+              <button type="button" onClick={() => { if (!guard()) closeSheet(); }}
+                style={{ width: '100%', padding: '12px', marginTop: 2, borderRadius: 12, cursor: 'pointer', fontSize: 14, fontWeight: 700, color: '#8a8d9e', background: 'transparent', border: '1px solid transparent' }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ───── CONFIRM POPUP (with loader) ───── */}
+      {dialog && (
+        <div onClick={() => { if (!guard()) closeDialog(); }}
+          style={{ position: 'fixed', inset: 0, zIndex: 10000001, background: 'rgba(5,5,10,0.72)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, animation: 'uiFade 0.18s ease' }}>
+          <div className="ui-motion" role="alertdialog" aria-modal="true" onClick={(e) => e.stopPropagation()}
+            style={{ width: '100%', maxWidth: 400, background: '#151426', border: '1px solid #2a2a40', borderRadius: 18, padding: '24px 22px 20px', boxShadow: '0 24px 60px rgba(0,0,0,0.55)', animation: 'uiPop 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.1)' }}>
+            <div style={{ width: 54, height: 54, borderRadius: '50%', margin: '0 auto 14px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ff4d4f', background: 'rgba(255,77,79,0.12)', border: '1px solid rgba(255,77,79,0.35)' }}>
+              <Icon name="trash" size={24} />
+            </div>
+            <div style={{ color: '#fff', fontWeight: 800, fontSize: 18, textAlign: 'center' }}>{dialog.title}</div>
+            <div style={{ color: '#9a9cb5', fontSize: 13.5, lineHeight: 1.55, textAlign: 'center', marginTop: 8 }}>{dialog.message}</div>
+
+            {dialog.details && dialog.details.length > 0 && (
+              <div style={{ marginTop: 14, background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {dialog.details.map((line, i) => (
+                  <div key={i} style={{ color: '#cdd6f4', fontSize: 12.5, wordBreak: 'break-word', lineHeight: 1.45 }}>{line}</div>
+                ))}
+              </div>
+            )}
+
+            {busy && (
+              <div style={{ marginTop: 14 }}>
+                <div style={{ height: 4, borderRadius: 4, background: 'rgba(255,255,255,0.07)', overflow: 'hidden' }}>
+                  <div className="ui-motion" style={{ width: '35%', height: '100%', borderRadius: 4, background: 'linear-gradient(90deg, #8c82f2, #00e5ff)', animation: 'uiBar 1s ease-in-out infinite' }} />
+                </div>
+                <div style={{ color: '#8a8d9e', fontSize: 11, textAlign: 'center', marginTop: 6 }}>Please wait, deleting…</div>
+              </div>
+            )}
+
+            {dialogError && (
+              <div style={{ marginTop: 14, display: 'flex', gap: 8, alignItems: 'flex-start', background: 'rgba(255,77,79,0.1)', border: '1px solid rgba(255,77,79,0.3)', borderRadius: 10, padding: '9px 12px', color: '#ff8a8c', fontSize: 12, lineHeight: 1.45, wordBreak: 'break-word' }}>
+                <span style={{ display: 'flex', marginTop: 1, flexShrink: 0 }}><Icon name="alert" size={15} /></span>
+                <span>{dialogError}</span>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+              <button type="button" autoFocus disabled={busy} onClick={() => { if (!guard()) closeDialog(); }}
+                style={{ flex: 1, padding: '12px', borderRadius: 12, fontSize: 14, fontWeight: 700, color: '#cdd6f4', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.5 : 1 }}>
+                Cancel
+              </button>
+              <button type="button" disabled={busy} onClick={() => { if (guard()) return; runConfirm(); }}
+                style={{ flex: 1.2, padding: '12px', borderRadius: 12, fontSize: 14, fontWeight: 800, color: '#fff', background: busy ? '#a33a3c' : '#ff4d4f', border: 'none', cursor: busy ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                {busy
+                  ? (<><span className="ui-motion" style={{ width: 15, height: 15, border: '2px solid rgba(255,255,255,0.35)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'uiSpin 0.7s linear infinite' }} />Deleting…</>)
+                  : (dialogError ? 'Retry' : (dialog.confirmText || 'Delete'))}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ───── TOAST ───── */}
+      {toast && (
+        <div key={toast.id} className="ui-motion"
+          style={{ position: 'fixed', left: '50%', bottom: 'calc(26px + env(safe-area-inset-bottom, 0px))', transform: 'translateX(-50%)', zIndex: 10000002, pointerEvents: 'none', display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 30, fontSize: 13, fontWeight: 700, maxWidth: '90vw',
+            color: toast.type === 'error' ? '#ff8a8c' : '#00ff80',
+            background: toast.type === 'error' ? '#2a1618' : '#10261c',
+            border: `1px solid ${toast.type === 'error' ? 'rgba(255,77,79,0.4)' : 'rgba(0,255,128,0.35)'}`,
+            boxShadow: '0 10px 30px rgba(0,0,0,0.45)', animation: 'uiToast 0.22s ease' }}>
+          <Icon name={toast.type === 'error' ? 'alert' : 'check'} size={16} />
+          <span>{toast.text}</span>
+        </div>
+      )}
+    </>,
+    document.body
+  );
+});
+
+// ═══════════════════════════════════════════════════════════
+// 🆕 NEW: CHAT PAIR (one prompt + AI reply) — memoized, supports LONG PRESS / right-click menu
+// Markup is the same as before; only the long-press handlers were added.
+// ═══════════════════════════════════════════════════════════
+const IS_TOUCH_DEVICE = typeof window !== 'undefined' && !!window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+
+const extractText = (child) => {
+  if (typeof child === 'string') return child;
+  if (Array.isArray(child)) return child.map(extractText).join('');
+  if (child && child.props && child.props.children) return extractText(child.props.children);
+  return '';
+};
+
+function MarkdownPre({ node, children, ...props }) {
+  const codeString = extractText(children);
+
+  return (
+    <div style={{ background: '#0b0a14', borderRadius: '10px', border: '1px solid #2a2a40', overflow: 'hidden', margin: '12px 0', boxShadow: '0 4px 15px rgba(0,0,0,0.2)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#151426', padding: '6px 12px', borderBottom: '1px solid #2a2a40' }}>
+        <span style={{ fontSize: '10px', color: '#8a8d9e', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Terminal / Code</span>
+        <button
+          onClick={() => { navigator.clipboard.writeText(codeString); alert("Code Copied!"); }}
+          style={{ background: 'transparent', border: 'none', color: '#8c82f2', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 'bold', padding: 0 }}
+        >
+          <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          Copy
+        </button>
+      </div>
+      <pre {...props} style={{ margin: 0, padding: '12px', background: 'transparent', overflowX: 'auto', fontSize: '12px', color: '#cdd6f4' }}>
+        {children}
+      </pre>
+    </div>
+  );
+}
+
+const markdownComponents = { pre: MarkdownPre };
+
+const ChatPair = memo(function ChatPair({ log, showSentAs, onImageClick, onOpenMenu }) {
+  const timerRef = useRef(null);
+  const startRef = useRef({ x: 0, y: 0 });
+  const firedRef = useRef(false);
+
+  useEffect(() => () => clearTimeout(timerRef.current), []);
+
+  const cancel = () => { clearTimeout(timerRef.current); timerRef.current = null; };
+  const begin = (x, y) => {
+    cancel();
+    firedRef.current = false;
+    startRef.current = { x, y };
+    timerRef.current = setTimeout(() => {
+      timerRef.current = null;
+      firedRef.current = true;
+      try { if (navigator.vibrate) navigator.vibrate(18); } catch (e) { /* ignore */ }
+      onOpenMenu(log);
+    }, 520);
+  };
+  const moved = (x, y, limit) => Math.abs(x - startRef.current.x) > limit || Math.abs(y - startRef.current.y) > limit;
+
+  const pressHandlers = {
+    // Touch (mobile) — long press, scroll karne par cancel
+    onTouchStart: (e) => { const t = e.touches[0]; if (t) begin(t.clientX, t.clientY); },
+    onTouchMove: (e) => { const t = e.touches[0]; if (t && moved(t.clientX, t.clientY, 10)) cancel(); },
+    onTouchEnd: (e) => { cancel(); if (firedRef.current && e.cancelable) e.preventDefault(); },
+    onTouchCancel: cancel,
+    // Mouse (desktop) — press & hold ya right-click
+    onMouseDown: (e) => { if (e.button === 0 && !IS_TOUCH_DEVICE) begin(e.clientX, e.clientY); },
+    onMouseMove: (e) => { if (timerRef.current && moved(e.clientX, e.clientY, 6)) cancel(); },
+    onMouseUp: cancel,
+    onMouseLeave: cancel,
+    onContextMenu: (e) => {
+      e.preventDefault();
+      cancel();
+      if (!firedRef.current) { firedRef.current = true; onOpenMenu(log); }
+    },
+    // Long press ke baad image/link ka accidental click na chale
+    onClickCapture: (e) => {
+      if (firedRef.current) { e.preventDefault(); e.stopPropagation(); firedRef.current = false; }
+    },
+  };
+
+  const isLove = log.isLoveMsg || log.activeMode === 'lover_girl' || log.activeMode === 'lover_boy' || log.activeEgo === 'lover_girl' || log.activeEgo === 'lover_boy';
+  const isRoast = log.isRoasterMode && !isLove;
+
+  let loveLabel = null;
+  if (isLove) {
+    if (log.activeMode === 'lover_girl' || log.activeEgo === 'lover_girl') loveLabel = 'GF 🌸';
+    else if (log.activeMode === 'lover_boy' || log.activeEgo === 'lover_boy') loveLabel = 'BF 🦋';
+    else loveLabel = 'LOVE 💖';
+  }
+
+  return (
+    <div className={styles.chatPair} {...pressHandlers}
+      style={IS_TOUCH_DEVICE ? { WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' } : undefined}>
+      {/* USER MESSAGE ROW */}
+      <div className={`${styles.bubbleRow} ${styles.rowUser}`}>
+        <div className={`${styles.chatBubble} ${styles.bubbleUser}`}>
+
+          {/* 🔥 ADMIN: SHOW WHICH NAME WAS USED FOR THIS SPECIFIC MESSAGE 🔥 */}
+          {showSentAs && (
+            <div style={{ fontSize: '10px', color: '#f5b942', marginBottom: '6px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '4px', fontWeight: 'bold' }}>
+              📝 Sent as: {log.userName}
+            </div>
+          )}
+
+          {/* 🔥 ADMIN IMAGE VIEWER: ZOOM ON CLICK 🔥 */}
+          {log.attachedImage && (
+            <div style={{ marginBottom: log.prompt ? '12px' : '0' }}>
+              <img
+                src={log.attachedImage}
+                alt="User Uploaded"
+                onClick={() => onImageClick(log.attachedImage)}
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: '200px',
+                  borderRadius: '8px',
+                  boxShadow: '0 4px 15px rgba(0,0,0,0.2)',
+                  display: 'block',
+                  cursor: 'zoom-in'
+                }}
+              />
+            </div>
+          )}
+
+          <div style={{ whiteSpace: 'pre-wrap' }}>{log.prompt}</div>
+          <span className={styles.bubbleTime}>
+            {new Date(log.timestamp).toLocaleDateString('en-IN', { day:'2-digit', month:'short' })}
+            {' '}
+            {new Date(log.timestamp).toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', hour12: true })}
+          </span>
+        </div>
+      </div>
+
+      {/* AI MESSAGE ROW */}
+      <div className={`${styles.bubbleRow} ${styles.rowAi}`}>
+        <div className={styles.chatAvatarWrapper}><img src="/logo.svg" alt="AI" className={styles.aiSmallAvatar}/></div>
+
+        <div className={`${styles.chatBubble} ${styles.bubbleAi} ${isRoast ? styles.bubbleRoast : ''} ${isLove ? styles.bubbleLove : ''}`}>
+
+          {loveLabel && (
+            <div style={{ display: 'inline-block', fontSize: '10px', fontWeight: '900', color: '#ff1493', background: 'rgba(255, 20, 147, 0.15)', padding: '2px 7px', borderRadius: '5px', marginBottom: '6px', border: '1px solid rgba(255, 20, 147, 0.4)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              {loveLabel}
+            </div>
+          )}
+
+          <div className={styles.markdownBody}>
+            <ReactMarkdown components={markdownComponents}>
+              {log.response}
+            </ReactMarkdown>
+          </div>
+
+          <div className={styles.bubbleFooter}>
+            <span className={styles.bubbleModel}>{log.model}</span>
+            <span className={styles.bubbleTime}>{((log.responseTimeMs||0)/1000).toFixed(1)}s • {log.totalTokens||0} tok • ${estimateCost(log).toFixed(4)}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+});
+
 // ─── MAIN COMPONENT ───
 function Admin() {
   const [logs, setLogs] = useState([]);
@@ -251,6 +704,11 @@ function Admin() {
   
   // 🔥 IMAGE FULL SCREEN STATE 🔥
   const [fullScreenImage, setFullScreenImage] = useState(null);
+
+  // 🆕 CHAT FULL SCREEN + POPUP HOST (confirm / loader / toast / long-press menu)
+  const [isChatFullscreen, setIsChatFullscreen] = useState(false);
+  const uiRef = useRef(null);
+  const ignorePopRef = useRef(false);
 
   // Responsive Hook
   useEffect(() => {
@@ -317,6 +775,92 @@ function Admin() {
     return () => clearInterval(countdownRef.current);
   }, [autoRefresh, fetchData, isAdmin]);
 
+  // ═══════════════════════════════════════════
+  // 🆕 CHAT FULL SCREEN — effects
+  // ═══════════════════════════════════════════
+  // User/chat delete ho jaye to full screen & mobile chat view band
+  useEffect(() => {
+    if (!selectedUser) { setIsChatFullscreen(false); setIsMobileChatView(false); }
+  }, [selectedUser]);
+
+  // Full screen mein: Esc + phone ka Back button sirf full screen band karega (page se bahar nahi jayega)
+  useEffect(() => {
+    if (!isChatFullscreen) return;
+    try { window.history.pushState({ ...(window.history.state || {}), aivoxFs: true }, ''); } catch (e) { /* ignore */ }
+
+    const onPop = () => {
+      if (ignorePopRef.current) { ignorePopRef.current = false; return; }
+      setIsChatFullscreen(false);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') setIsChatFullscreen(false); };
+
+    window.addEventListener('popstate', onPop);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('popstate', onPop);
+      window.removeEventListener('keydown', onKey);
+      if (window.history.state && window.history.state.aivoxFs) {
+        ignorePopRef.current = true;
+        window.history.back();
+      }
+    };
+  }, [isChatFullscreen]);
+
+  // Image viewer: Esc se pehle sirf image band ho
+  useEffect(() => {
+    if (!fullScreenImage) return;
+    const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); setFullScreenImage(null); } };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [fullScreenImage]);
+
+  // ═══════════════════════════════════════════
+  // 🆕 DELETE ACTIONS (popup + loader via UiHost)
+  // ═══════════════════════════════════════════
+  const requestDeleteMessage = useCallback((log) => {
+    uiRef.current?.confirm({
+      title: 'Delete this message?',
+      message: 'Ye prompt aur uska AI reply database se permanently delete ho jayega. Undo nahi hoga.',
+      details: [(log.prompt || (log.attachedImage ? '📸 Image message' : 'Empty message')).slice(0, 140)],
+      confirmText: 'Delete Message',
+      successMsg: 'Message deleted',
+      onConfirm: async () => {
+        await deleteDoc(doc(db, "aivox_tracking", log.id));
+        setLogs(prev => prev.filter(l => l.id !== log.id));
+        setSelectedUser(prev => {
+          if (!prev) return prev;
+          const msgs = prev.messages.filter(m => m.id !== log.id);
+          return msgs.length ? { ...prev, messages: msgs } : null;
+        });
+      },
+    });
+  }, []);
+
+  const openMessageMenu = useCallback((log) => {
+    const ui = uiRef.current;
+    if (!ui) return;
+    const actions = [];
+    if (log.prompt) {
+      actions.push({ label: 'Copy prompt', icon: 'copy', onClick: async () => {
+        const ok = await copyText(log.prompt);
+        ui.toast(ok ? 'Prompt copied' : 'Copy failed', ok ? 'success' : 'error');
+      } });
+    }
+    if (log.response) {
+      actions.push({ label: 'Copy response', icon: 'message', onClick: async () => {
+        const ok = await copyText(log.response);
+        ui.toast(ok ? 'Response copied' : 'Copy failed', ok ? 'success' : 'error');
+      } });
+    }
+    actions.push({ label: 'Delete message', icon: 'trash', tone: 'danger', onClick: () => requestDeleteMessage(log) });
+    ui.sheet({
+      title: 'Message options',
+      meta: `${log.userName || 'Anonymous'} • ${new Date(log.timestamp).toLocaleString()}`,
+      preview: log.prompt || (log.attachedImage ? '📸 Image message' : 'Empty message'),
+      actions,
+    });
+  }, [requestDeleteMessage]);
+
   // ─── CSV Download ───
   const downloadCSV = () => {
     if (logs.length === 0) return alert("No data!");
@@ -348,14 +892,19 @@ function Admin() {
   };
 
   // ─── User Management ───
-  const handleDeleteUser = async (userId, userName) => {
-    if (window.confirm(`Delete user: ${userName}?`)) {
-      try {
+  // 🆕 Delete ab popup + loader ke saath (window.confirm / alert ki jagah)
+  const handleDeleteUser = (userId, userName) => {
+    uiRef.current?.confirm({
+      title: 'Delete user account?',
+      message: 'Ye account record users collection se permanently hat jayega. Undo nahi hoga.',
+      details: [`👤 ${userName}`, `🆔 ${userId}`],
+      confirmText: 'Delete User',
+      successMsg: `${userName} deleted`,
+      onConfirm: async () => {
         await deleteDoc(doc(db, "users", userId));
         setRegisteredUsers(prev => prev.filter(u => u.id !== userId));
-        alert(`${userName} deleted.`);
-      } catch (error) { alert("Failed: " + error.message); }
-    }
+      },
+    });
   };
 
   const handleUpdateUserRole = async (userId, userName, currentRole) => {
@@ -458,6 +1007,36 @@ function Admin() {
     (u.name||'').toLowerCase().includes(userSearchQuery.toLowerCase()) ||
     (u.email||'').toLowerCase().includes(userSearchQuery.toLowerCase())
   );
+
+  // 🆕 DELETE ENTIRE CHAT (popup + loader) — opened chat ke saare messages Firestore se delete
+  const requestDeleteChat = (user) => {
+    if (!user) return;
+    const snapIds = new Set(user.messages.map(m => m.id));
+    // Snapshot purana ho sakta hai — latest group se bhi ids le lo taaki koi message reh na jaye
+    const liveGroup = userList.find(u => u.messages.some(m => snapIds.has(m.id)));
+    const ids = Array.from(new Set([...snapIds, ...(liveGroup ? liveGroup.messages.map(m => m.id) : [])]));
+
+    uiRef.current?.confirm({
+      title: 'Delete entire chat?',
+      message: 'Is user ki poori chat database se permanently delete ho jayegi (analytics se bhi hat jayegi). Undo nahi hoga.',
+      details: [`👤 ${user.userName}`, `📱 ${user.device} • ${user.os}`, `💬 ${ids.length} messages`],
+      confirmText: 'Delete Chat',
+      successMsg: `${user.userName}'s chat deleted`,
+      onConfirm: async () => {
+        for (let i = 0; i < ids.length; i += 400) {
+          const chunk = ids.slice(i, i + 400);
+          const batch = writeBatch(db);
+          chunk.forEach(id => batch.delete(doc(db, "aivox_tracking", id)));
+          await batch.commit();
+          const gone = new Set(chunk);
+          setLogs(prev => prev.filter(l => !gone.has(l.id)));
+        }
+        setSelectedUser(null);
+        setIsChatFullscreen(false);
+        setIsMobileChatView(false);
+      },
+    });
+  };
 
   const osStats      = logs.reduce((a, l) => { a[l.os]=(a[l.os]||0)+1; return a; }, {});
   const browserStats = logs.reduce((a, l) => { a[l.browserVendor]=(a[l.browserVendor]||0)+1; return a; }, {});
@@ -574,6 +1153,21 @@ function Admin() {
   const todayCost   = todayLogs.reduce((s,l)=>s+estimateCost(l),0);
   const todayRequests = todayLogs.length;
 
+  // 🆕 User Accounts: chat activity (sirf us tab mein calculate hota hai — lag nahi)
+  // Agar users doc mein signup/last-login date save nahi hai, to chat ke first/last message se fallback milta hai
+  const userChatActivity = {};
+  if (activeTab === 'usermanagement') {
+    logs.forEach(l => {
+      const k = (l.userName || '').trim().toLowerCase();
+      if (!k) return;
+      const t = new Date(l.timestamp).getTime();
+      if (isNaN(t)) return;
+      const e = userChatActivity[k];
+      if (!e) userChatActivity[k] = { first: t, last: t };
+      else { if (t < e.first) e.first = t; if (t > e.last) e.last = t; }
+    });
+  }
+
   useEffect(() => {
     if (filteredChatUsers.length > 0 && !selectedUser && window.innerWidth > 900) setSelectedUser(filteredChatUsers[0]);
   }, [filteredChatUsers, selectedUser]);
@@ -616,6 +1210,19 @@ function Admin() {
   );
 
   const padLeft = { paddingLeft: (isDesktop && !isSidebarVisible) ? '40px' : '0', transition: '0.3s' };
+
+  // 🆕 Chat messages list (normal view + full screen dono ke liye same list)
+  const chatMessagesList = (activeTab === 'chats' && selectedUser)
+    ? selectedUser.messages.slice().reverse().map(log => (
+        <ChatPair
+          key={log.id}
+          log={log}
+          showSentAs={!!(selectedUser.aliases && selectedUser.aliases.length > 1 && log.userName !== selectedUser.userName)}
+          onImageClick={setFullScreenImage}
+          onOpenMenu={openMessageMenu}
+        />
+      ))
+    : null;
 
   // ─── RENDER ───
   return (
@@ -1348,6 +1955,7 @@ function Admin() {
 
         {/* ══════════════════════════════════════════
             USER CHATS (🔥 NOW WITH ALIAS TRACKING & MARKDOWN 🔥)
+            🆕 + FULL SCREEN BUTTON, DELETE CHAT, LONG-PRESS DELETE MESSAGE
         ══════════════════════════════════════════ */}
         {activeTab === 'chats' && (
           <div className={styles.sectionFadeIn} style={{ height:'100%', overflow:'hidden' }}>
@@ -1399,117 +2007,20 @@ function Admin() {
                         )}
                         <p style={{margin:0,fontSize:'11px',color:'#888'}}>{selectedUser.device} | FP: {selectedUser.id}</p>
                       </div>
+
+                      {/* 🆕 FULL SCREEN + DELETE CHAT BUTTONS */}
+                      <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
+                        <IconButton title="Open chat in full screen" onClick={() => setIsChatFullscreen(true)}>
+                          <Icon name="expand" size={17} />
+                        </IconButton>
+                        <IconButton title="Delete this chat" tone="danger" onClick={() => requestDeleteChat(selectedUser)}>
+                          <Icon name="trash" size={17} />
+                        </IconButton>
+                      </div>
                     </div>
                     <div className={styles.chatMessagesArea}>
-                      {selectedUser.messages.slice().reverse().map(log => {
-                        const isLove = log.isLoveMsg || log.activeMode === 'lover_girl' || log.activeMode === 'lover_boy' || log.activeEgo === 'lover_girl' || log.activeEgo === 'lover_boy';
-                        const isRoast = log.isRoasterMode && !isLove; 
-                        
-                        let loveLabel = null;
-                        if (isLove) {
-                          if (log.activeMode === 'lover_girl' || log.activeEgo === 'lover_girl') loveLabel = 'GF 🌸';
-                          else if (log.activeMode === 'lover_boy' || log.activeEgo === 'lover_boy') loveLabel = 'BF 🦋';
-                          else loveLabel = 'LOVE 💖';
-                        }
-                        
-                        return (
-                          <div key={log.id} className={styles.chatPair}>
-                            {/* USER MESSAGE ROW */}
-                            <div className={`${styles.bubbleRow} ${styles.rowUser}`}>
-                              <div className={`${styles.chatBubble} ${styles.bubbleUser}`}>
-                                
-                                {/* 🔥 ADMIN: SHOW WHICH NAME WAS USED FOR THIS SPECIFIC MESSAGE 🔥 */}
-                                {selectedUser.aliases && selectedUser.aliases.length > 1 && log.userName !== selectedUser.userName && (
-                                  <div style={{ fontSize: '10px', color: '#f5b942', marginBottom: '6px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '4px', fontWeight: 'bold' }}>
-                                    📝 Sent as: {log.userName}
-                                  </div>
-                                )}
-
-                                {/* 🔥 ADMIN IMAGE VIEWER: ZOOM ON CLICK 🔥 */}
-                                {log.attachedImage && (
-                                  <div style={{ marginBottom: log.prompt ? '12px' : '0' }}>
-                                    <img 
-                                      src={log.attachedImage} 
-                                      alt="User Uploaded" 
-                                      onClick={() => setFullScreenImage(log.attachedImage)}
-                                      style={{ 
-                                        maxWidth: '100%', 
-                                        maxHeight: '200px', 
-                                        borderRadius: '8px', 
-                                        boxShadow: '0 4px 15px rgba(0,0,0,0.2)',
-                                        display: 'block',
-                                        cursor: 'zoom-in'
-                                      }} 
-                                    />
-                                  </div>
-                                )}
-
-                                <div style={{ whiteSpace: 'pre-wrap' }}>{log.prompt}</div>
-                                <span className={styles.bubbleTime}>
-                                  {new Date(log.timestamp).toLocaleDateString('en-IN', { day:'2-digit', month:'short' })}
-                                  {' '}
-                                  {new Date(log.timestamp).toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', hour12: true })}
-                                </span>
-                              </div>
-                            </div>
-
-                            {/* AI MESSAGE ROW */}
-                            <div className={`${styles.bubbleRow} ${styles.rowAi}`}>
-                              <div className={styles.chatAvatarWrapper}><img src="/logo.svg" alt="AI" className={styles.aiSmallAvatar}/></div>
-                              
-                              <div className={`${styles.chatBubble} ${styles.bubbleAi} ${isRoast ? styles.bubbleRoast : ''} ${isLove ? styles.bubbleLove : ''}`}>
-                                
-                                {loveLabel && (
-                                  <div style={{ display: 'inline-block', fontSize: '10px', fontWeight: '900', color: '#ff1493', background: 'rgba(255, 20, 147, 0.15)', padding: '2px 7px', borderRadius: '5px', marginBottom: '6px', border: '1px solid rgba(255, 20, 147, 0.4)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                                    {loveLabel}
-                                  </div>
-                                )}
-
-                                <div className={styles.markdownBody}>
-                                  <ReactMarkdown
-                                    components={{
-                                      pre({node, children, ...props}) {
-                                        const extractText = (child) => {
-                                          if (typeof child === 'string') return child;
-                                          if (Array.isArray(child)) return child.map(extractText).join('');
-                                          if (child && child.props && child.props.children) return extractText(child.props.children);
-                                          return '';
-                                        };
-                                        const codeString = extractText(children);
-                                        
-                                        return (
-                                          <div style={{ background: '#0b0a14', borderRadius: '10px', border: '1px solid #2a2a40', overflow: 'hidden', margin: '12px 0', boxShadow: '0 4px 15px rgba(0,0,0,0.2)' }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#151426', padding: '6px 12px', borderBottom: '1px solid #2a2a40' }}>
-                                              <span style={{ fontSize: '10px', color: '#8a8d9e', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Terminal / Code</span>
-                                              <button 
-                                                onClick={() => { navigator.clipboard.writeText(codeString); alert("Code Copied!"); }}
-                                                style={{ background: 'transparent', border: 'none', color: '#8c82f2', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 'bold', padding: 0 }}
-                                              >
-                                                <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                                                Copy
-                                              </button>
-                                            </div>
-                                            <pre {...props} style={{ margin: 0, padding: '12px', background: 'transparent', overflowX: 'auto', fontSize: '12px', color: '#cdd6f4' }}>
-                                              {children}
-                                            </pre>
-                                          </div>
-                                        );
-                                      }
-                                    }}
-                                  >
-                                    {log.response}
-                                  </ReactMarkdown>
-                                </div>
-                                
-                                <div className={styles.bubbleFooter}>
-                                  <span className={styles.bubbleModel}>{log.model}</span>
-                                  <span className={styles.bubbleTime}>{((log.responseTimeMs||0)/1000).toFixed(1)}s • {log.totalTokens||0} tok • ${estimateCost(log).toFixed(4)}</span>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
+                      {/* Full screen mein list wahan dikhti hai — yahan dobara render nahi hoti (lag free) */}
+                      {!isChatFullscreen && chatMessagesList}
                     </div>
                   </>
                 ) : <div className={styles.noUserSelected}><h2>👈 Select a user</h2></div>}
@@ -1572,6 +2083,7 @@ function Admin() {
 
         {/* ══════════════════════════════════════════
             USER MANAGEMENT
+            🆕 + JOINED / LAST ACTIVE (DATE & TIME), POPUP DELETE
         ══════════════════════════════════════════ */}
         {activeTab === 'usermanagement' && (
           <div className={styles.sectionFadeIn} style={{ display:'block', height:'auto', paddingBottom:'60px' }}>
@@ -1588,11 +2100,15 @@ function Admin() {
               <div className={styles.analyticsCard}><h3>Admin Accounts</h3><div className={styles.statValue} style={{color:'#f5b942'}}>{registeredUsers.filter(u=>u.role==='admin'||allowedEmails.includes((u.email||'').toLowerCase())).length}</div></div>
             </div>
             <div className={styles.tableContainer} style={{ overflowX:'auto' }}>
-              <table className={styles.adminTable} style={{ minWidth:800 }}>
-                <thead><tr><th>User</th><th>Email</th><th>UID</th><th>Role</th><th>Actions</th></tr></thead>
+              <table className={styles.adminTable} style={{ minWidth:1050 }}>
+                <thead><tr><th>User</th><th>Email</th><th>UID</th><th>Role</th><th>Joined (Date & Time)</th><th>Last Active</th><th>Actions</th></tr></thead>
                 <tbody>
                   {filteredRegisteredUsers.map(user => {
                     const isMaster = allowedEmails.includes((user.email||'').toLowerCase());
+                    const nameKey = (user.name||user.displayName||'').trim().toLowerCase();
+                    const act = userChatActivity[nameKey];
+                    const joinedVal = getJoinedValue(user);
+                    const lastVal = getLastLoginValue(user);
                     return (
                       <tr key={user.id}>
                         <td><div className={styles.sysTag} style={{background:'#8c82f2',color:'#fff'}}>{user.name||user.displayName||'Unknown'}</div></td>
@@ -1603,6 +2119,8 @@ function Admin() {
                             : user.role==='admin' ? <span className={styles.sysTag} style={{background:'#f5b942',color:'#000'}}>Admin</span>
                             : <span className={styles.sysTag} style={{background:'#1a3a2a',color:'#00ff80'}}>User</span>}
                         </td>
+                        <td><DateTimeCell value={joinedVal || (act ? act.first : null)} note={!joinedVal && act ? 'first chat' : ''} /></td>
+                        <td><DateTimeCell value={lastVal || (act ? act.last : null)} note={!lastVal && act ? 'last chat' : ''} /></td>
                         <td>
                           {!isMaster ? (
                             <div style={{display:'flex',gap:8}}>
@@ -1620,7 +2138,7 @@ function Admin() {
                       </tr>
                     );
                   })}
-                  {filteredRegisteredUsers.length === 0 && <tr><td colSpan={5} style={{textAlign:'center',padding:'40px',color:'#888'}}>Koi user nahi mila.</td></tr>}
+                  {filteredRegisteredUsers.length === 0 && <tr><td colSpan={7} style={{textAlign:'center',padding:'40px',color:'#888'}}>Koi user nahi mila.</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -2071,47 +2589,86 @@ function Admin() {
           </div>
         )}
 
-        {/* 🔥 FULL SCREEN IMAGE VIEWER MODAL 🔥 */}
-        {fullScreenImage && (
-          <div 
-            style={{
-              position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-              backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 999999,
-              display: 'flex', justifyContent: 'center', alignItems: 'center',
-              backdropFilter: 'blur(5px)', cursor: 'zoom-out'
-            }}
-            onClick={() => setFullScreenImage(null)}
-          >
-            <img 
-              src={fullScreenImage} 
-              alt="Full Screen" 
-              style={{
-                maxWidth: '95vw', maxHeight: '95vh',
-                objectFit: 'contain', borderRadius: '12px',
-                boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
-                cursor: 'default'
-              }}
-              onClick={(e) => e.stopPropagation()} 
-            />
-            <button 
-              onClick={() => setFullScreenImage(null)}
-              style={{
-                position: 'absolute', top: '20px', right: '20px',
-                background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', 
-                borderRadius: '50%', width: '44px', height: '44px', color: '#fff', 
-                fontSize: '20px', cursor: 'pointer', display: 'flex', 
-                justifyContent: 'center', alignItems: 'center', transition: '0.2s'
-              }}
-              onMouseOver={(e) => e.currentTarget.style.background = 'rgba(255,77,79,0.8)'}
-              onMouseOut={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
-            >
-              ✕
-            </button>
-          </div>
-        )}
-
       </main>
       {isMobileMenuOpen && <div className={styles.menuOverlay} onClick={() => setIsMobileMenuOpen(false)}></div>}
+
+      {/* ══════════════════════════════════════════
+          🆕 FULL SCREEN CHAT — sirf chat + Exit button (nav/sidebar/header kuch nahi)
+          Portal: kisi bhi parent ke scroll/transform se bahar, poori screen par stable
+      ══════════════════════════════════════════ */}
+      {isChatFullscreen && selectedUser && createPortal(
+        <div className="ui-motion"
+          style={{ position:'fixed', inset:0, zIndex:99990, background:'#0b0a14', display:'flex', flexDirection:'column', animation:'fsChatIn 0.18s ease' }}>
+          <style>{UI_KEYFRAMES}</style>
+
+          <div style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 16px', paddingTop:'calc(12px + env(safe-area-inset-top, 0px))', background:'#121120', borderBottom:'1px solid #1f1e2e', flexShrink:0 }}>
+            <div style={{ fontSize:22, flexShrink:0 }}>
+              {selectedUser.os?.includes('Mac')||selectedUser.os?.includes('iOS')?'🍎':selectedUser.os?.includes('Android')?'🤖':'💻'}
+            </div>
+            <div style={{ minWidth:0, flex:1 }}>
+              <div style={{ color:'#fff', fontWeight:800, fontSize:16, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{selectedUser.userName}</div>
+              <div style={{ color:'#8a8d9e', fontSize:11, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                {selectedUser.device} • {selectedUser.messages.length} msgs
+              </div>
+            </div>
+            <button type="button" onClick={() => setIsChatFullscreen(false)} aria-label="Exit full screen" title="Exit full screen"
+              style={{ display:'flex', alignItems:'center', gap:8, padding: isDesktop ? '9px 14px' : '9px 11px', borderRadius:10, cursor:'pointer', color:'#e6e6fa', fontSize:13, fontWeight:700, flexShrink:0,
+                background:'rgba(140,130,242,0.16)', border:'1px solid rgba(140,130,242,0.45)' }}>
+              <Icon name="collapse" size={17} />
+              {isDesktop && <span>Exit Full Screen</span>}
+            </button>
+          </div>
+
+          <div className={styles.chatMessagesArea}
+            style={{ flex:1, minHeight:0, height:'auto', maxHeight:'none', overflowY:'auto', overscrollBehavior:'contain', WebkitOverflowScrolling:'touch', paddingBottom:'calc(16px + env(safe-area-inset-bottom, 0px))' }}>
+            {chatMessagesList}
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* 🔥 FULL SCREEN IMAGE VIEWER MODAL 🔥 (portal => hamesha chat full screen ke upar) */}
+      {fullScreenImage && createPortal(
+        <div 
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 999999,
+            display: 'flex', justifyContent: 'center', alignItems: 'center',
+            backdropFilter: 'blur(5px)', cursor: 'zoom-out'
+          }}
+          onClick={() => setFullScreenImage(null)}
+        >
+          <img 
+            src={fullScreenImage} 
+            alt="Full Screen" 
+            style={{
+              maxWidth: '95vw', maxHeight: '95vh',
+              objectFit: 'contain', borderRadius: '12px',
+              boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
+              cursor: 'default'
+            }}
+            onClick={(e) => e.stopPropagation()} 
+          />
+          <button 
+            onClick={() => setFullScreenImage(null)}
+            style={{
+              position: 'absolute', top: '20px', right: '20px',
+              background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', 
+              borderRadius: '50%', width: '44px', height: '44px', color: '#fff', 
+              fontSize: '20px', cursor: 'pointer', display: 'flex', 
+              justifyContent: 'center', alignItems: 'center', transition: '0.2s'
+            }}
+            onMouseOver={(e) => e.currentTarget.style.background = 'rgba(255,77,79,0.8)'}
+            onMouseOut={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+          >
+            ✕
+          </button>
+        </div>,
+        document.body
+      )}
+
+      {/* 🆕 POPUPS: delete confirm + loader, long-press menu, toast */}
+      <UiHost ref={uiRef} />
     </div>
   );
 }
