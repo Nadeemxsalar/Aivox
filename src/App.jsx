@@ -167,6 +167,9 @@ function App() {
   const [showSignupHookModal, setShowSignupHookModal] = useState(false);
   const [tempName, setTempName] = useState('');
   
+  // 🔥 NAVIGATION LOADER STATE 🔥
+  const [navLoadingState, setNavLoadingState] = useState({ isLoading: false, label: '' });
+
   const [activeEgo, setActiveEgo] = useState(localStorage.getItem('aivox_alter_ego') || 'smart');
   const [isRoasterMode, setIsRoasterMode] = useState(activeEgo === 'savage'); 
   const isLoveMode = activeEgo === 'lover_girl' || activeEgo === 'lover_boy';
@@ -246,6 +249,18 @@ function App() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // 🔥 THE FIX: Prevent navigation loader from getting stuck on Browser Back button (bfcache)
+  useEffect(() => {
+    const handlePageShow = (event) => {
+      if (event.persisted) {
+        // Agar page browser ke cache (back button) se load ho raha hai, toh loader hata do
+        setNavLoadingState({ isLoading: false, label: '' });
+      }
+    };
+    window.addEventListener('pageshow', handlePageShow);
+    return () => window.removeEventListener('pageshow', handlePageShow);
+  }, []);
+
   // 🗂️ Mode ki apni chat load karo (nahi mili toh default greeting)
   const loadChatHistory = (newEgo) => {
     chatKeyRef.current = getChatKey(newEgo);
@@ -282,6 +297,19 @@ function App() {
   const showToast = (msg) => { setToastMsg(msg); setTimeout(() => setToastMsg(''), 3000); };
 
   const currentDisplayName = authUser ? authUser.displayName : (guestName || 'User');
+
+  // 🔥 SMOOTH NAVIGATION HANDLER (UPDATED TO PREVENT STUCK UI) 🔥
+  const handleSmoothNavigate = (path, label) => {
+    if (isMobile) setIsSidebarOpen(false);
+    setNavLoadingState({ isLoading: true, label });
+    setTimeout(() => {
+      window.location.href = path;
+      // Ek safety timer add kiya hai taaki agar route change ho, state apne aap normal ho jaye
+      setTimeout(() => {
+        setNavLoadingState({ isLoading: false, label: '' });
+      }, 500);
+    }, 1500); 
+  };
 
   const fileToGenerativePart = async (file) => {
     return new Promise((resolve, reject) => {
@@ -752,6 +780,67 @@ function App() {
 
   return (
     <div className={`app-container ${isDarkMode ? 'dark-mode' : 'light-mode'} ${themeClass}`}>
+      
+      {/* 🔥 INJECTED STYLES FOR DISABLING GOOGLE SEARCH POPUP & NAVIGATION LOADER 🔥 */}
+      <style>{`
+        /* Prevent Text Selection and Google Touch Callouts Globally for UI elements */
+        body {
+          -webkit-user-select: none;
+          user-select: none;
+          -webkit-touch-callout: none;
+        }
+        /* Re-enable for chat text and inputs so user can still copy messages */
+        .message-content-wrapper, input, textarea {
+          -webkit-user-select: text !important;
+          user-select: text !important;
+          -webkit-touch-callout: default !important;
+        }
+        
+        /* Custom Navigation Magic Loader */
+        .nav-magic-overlay {
+          position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+          background: rgba(11, 10, 20, 0.9); backdrop-filter: blur(12px);
+          z-index: 100000; display: flex; flex-direction: column;
+          align-items: center; justify-content: center;
+          animation: navFadeIn 0.3s ease forwards;
+        }
+        .nav-magic-spinner {
+          width: 70px; height: 70px; position: relative;
+        }
+        .nav-magic-spinner::before, .nav-magic-spinner::after {
+          content: ''; position: absolute; border-radius: 50%;
+          border: 3px solid transparent;
+        }
+        .nav-magic-spinner::before {
+          top: 0; left: 0; right: 0; bottom: 0;
+          border-top-color: #8c82f2; border-bottom-color: #ff4d85;
+          animation: navSpin 1s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite;
+        }
+        .nav-magic-spinner::after {
+          top: 10px; left: 10px; right: 10px; bottom: 10px;
+          border-left-color: #00e5ff; border-right-color: #f5b942;
+          animation: navSpin 0.8s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite reverse;
+        }
+        .nav-magic-text {
+          margin-top: 25px; color: #fff; font-size: 16px; font-weight: 800;
+          letter-spacing: 3px; text-transform: uppercase;
+          background: linear-gradient(90deg, #8c82f2, #ff4d85, #00e5ff);
+          -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+          animation: navPulse 1.5s ease-in-out infinite;
+        }
+        @keyframes navPulse { 0%, 100% { opacity: 0.6; transform: scale(0.95); } 50% { opacity: 1; transform: scale(1.05); } }
+        @keyframes navFadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes navSpin { 100% { transform: rotate(360deg); } }
+      `}</style>
+
+      {/* 🔥 MAGIC NAVIGATION LOADER OVERLAY 🔥 */}
+      {navLoadingState.isLoading && (
+        <div className="nav-magic-overlay">
+          <div className="nav-magic-spinner"></div>
+          <div className="nav-magic-text">Loading {navLoadingState.label}</div>
+        </div>
+      )}
+
       {toastMsg && <div className="custom-toast">{toastMsg}</div>}
 
       {showNameModal && (
@@ -957,25 +1046,25 @@ function App() {
 
           <div className="features-section">
             <p className="features-title">God-Mode Capabilities</p>
-            <div className="feature-item" onClick={() => window.location.href = '/features'}>
+            <div className="feature-item" onClick={() => handleSmoothNavigate('/features', 'Features')}>
               <div className="feat-icon-box" style={isLoveMode ? {color: '#ff4d85', borderColor: 'rgba(255, 77, 133, 0.3)'} : {}}>
                 <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
               </div>
               <div className="feat-text"><h4>Love Mode 💖</h4><p>Virtual Companion</p></div>
             </div>
-            <div className="feature-item" onClick={() => window.location.href = '/features'}>
+            <div className="feature-item" onClick={() => handleSmoothNavigate('/features', 'Features')}>
               <div className="feat-icon-box"><svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/></svg></div>
               <div className="feat-text"><h4>Digital Mirror</h4><p>Analyze chat psychology</p></div>
             </div>
-            <div className="feature-item" onClick={() => window.location.href = '/features'}>
+            <div className="feature-item" onClick={() => handleSmoothNavigate('/features', 'Features')}>
               <div className="feat-icon-box"><svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
               <div className="feat-text"><h4>Alter-Ego Mode</h4><p>Switch AI personalities</p></div>
             </div>
-            <div className="feature-item" onClick={() => window.location.href = '/features'}>
+            <div className="feature-item" onClick={() => handleSmoothNavigate('/features', 'Features')}>
               <div className="feat-icon-box"><svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
               <div className="feat-text"><h4>Memory Lock</h4><p>Permanently save secrets</p></div>
             </div>
-            <div className="feature-item" onClick={() => window.location.href = '/features'}>
+            <div className="feature-item" onClick={() => handleSmoothNavigate('/features', 'Features')}>
               <div className="feat-icon-box"><svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg></div>
               <div className="feat-text"><h4>Timeline Predictor</h4><p>Simulate future decisions</p></div>
             </div>
@@ -1002,7 +1091,7 @@ function App() {
             Download Chat
           </button>
 
-          <div className="user-profile-bar" onClick={() => window.location.href = '/profile'}>
+          <div className="user-profile-bar" onClick={() => handleSmoothNavigate('/profile', 'Profile')}>
             <div className="user-avatar-small">{currentDisplayName.charAt(0).toUpperCase()}</div>
             <div className="user-name-text">{currentDisplayName}</div>
             <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
