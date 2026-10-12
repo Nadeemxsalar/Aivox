@@ -15,20 +15,23 @@ import styles from './Profile.module.css';
 const LS = {
   guest: 'aivox_guest_name',
   chats: 'aivox_chat_history',
-  days: 'aivox_active_days', // days the user was active (for streak)
-  accent: 'aivox_accent', // chosen theme colour
+  days: 'aivox_active_days', // days the user was active (streak + activity map)
+  accent: 'aivox_accent', // chosen accent colour
   avatar: 'aivox_avatar', // chosen avatar style
+  theme: 'aivox_theme', // 'dark' | 'light' | 'auto'
   prefs: 'aivox_prefs', // preference toggles
   xpBank: 'aivox_xp_bank', // chats counted before history was cleared
+  lastLevel: 'aivox_last_level', // last level the user was congratulated for
 };
 
+// a = main colour, b = second gradient colour, d = deeper shade (used on light theme + buttons)
 const ACCENTS = [
-  { id: 'violet', name: 'Violet', a: '#8c82f2', b: '#00e5ff', rgb: '140, 130, 242' },
-  { id: 'ocean', name: 'Ocean', a: '#4d8dff', b: '#00e5ff', rgb: '77, 141, 255' },
-  { id: 'emerald', name: 'Emerald', a: '#00d98b', b: '#7df9ff', rgb: '0, 217, 139' },
-  { id: 'rose', name: 'Rose', a: '#ff5c8a', b: '#ffb36b', rgb: '255, 92, 138' },
-  { id: 'sunset', name: 'Sunset', a: '#ff8a4c', b: '#ff5c8a', rgb: '255, 138, 76' },
-  { id: 'aurora', name: 'Aurora', a: '#b46bff', b: '#ff6bd6', rgb: '180, 107, 255' },
+  { id: 'violet', name: 'Violet', a: '#8c82f2', b: '#00e5ff', d: '#5a4fd8', rgb: '140, 130, 242' },
+  { id: 'ocean', name: 'Ocean', a: '#4d8dff', b: '#2ad4ff', d: '#1f5fd6', rgb: '77, 141, 255' },
+  { id: 'emerald', name: 'Emerald', a: '#12b886', b: '#5eead4', d: '#0b7d5c', rgb: '18, 184, 134' },
+  { id: 'rose', name: 'Rose', a: '#ff5c8a', b: '#ffb36b', d: '#d42a62', rgb: '255, 92, 138' },
+  { id: 'sunset', name: 'Sunset', a: '#ff8a4c', b: '#ff5c8a', d: '#d4560f', rgb: '255, 138, 76' },
+  { id: 'aurora', name: 'Aurora', a: '#b46bff', b: '#ff6bd6', d: '#7c2fe0', rgb: '180, 107, 255' },
 ];
 
 // "auto" follows the accent theme. "gold" is for Premium members only.
@@ -39,6 +42,20 @@ const AVATAR_STYLES = [
   { id: 'sunset', name: 'Sunset', c1: '#ff8a4c', c2: '#ff3d77', fg: '#ffffff' },
   { id: 'mint', name: 'Mint', c1: '#2de2a6', c2: '#0f8f80', fg: '#04211b' },
   { id: 'rose', name: 'Rose', c1: '#ff7eb3', c2: '#a63fd0', fg: '#ffffff' },
+];
+
+const THEMES = [
+  { id: 'dark', label: 'Dark', icon: 'moon' },
+  { id: 'light', label: 'Light', icon: 'sun' },
+  { id: 'auto', label: 'Auto', icon: 'monitor' },
+];
+
+const RANKS = [
+  { name: 'Rookie', min: 1, blurb: 'Just getting started' },
+  { name: 'Explorer', min: 2, blurb: 'Finding your feet' },
+  { name: 'Pro', min: 4, blurb: 'A confident chatter' },
+  { name: 'Elite', min: 7, blurb: 'Chat royalty' },
+  { name: 'Legend', min: 10, blurb: 'The very top' },
 ];
 
 const DEFAULT_PREFS = {
@@ -56,7 +73,7 @@ const PERKS = [
   { title: 'Faster responses', desc: 'Skip the queue' },
   { title: 'Early access', desc: 'Try new features first' },
   { title: 'Gold avatar and badge', desc: 'Show you are a founder' },
-  { title: 'Profile card and data export', desc: 'Share it or download it' },
+  { title: 'Profile card and backups', desc: 'Share it, export it, restore it' },
 ];
 
 const COMPARE = [
@@ -71,6 +88,7 @@ const COMPARE = [
 
 const TABS = [
   { id: 'overview', label: 'Overview', icon: 'grid' },
+  { id: 'activity', label: 'Activity', icon: 'chart' },
   { id: 'plan', label: 'Subscription', icon: 'crown' },
   { id: 'badges', label: 'Achievements', icon: 'award' },
   { id: 'settings', label: 'Settings', icon: 'sliders' },
@@ -87,8 +105,11 @@ const PROVIDERS = {
   phone: 'Phone number',
 };
 
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const HEAT_WEEKS = 18;
 const RING_R = 34;
 const RING_C = 2 * Math.PI * RING_R;
+const CONFETTI_COLORS = ['var(--accent)', 'var(--accent2)', '#f5b942', '#ff5c8a', '#12b886'];
 
 /* ── Safe localStorage wrappers (never crash in private mode) ── */
 const readRaw = (key, fallback = '') => {
@@ -102,8 +123,9 @@ const readRaw = (key, fallback = '') => {
 const writeRaw = (key, value) => {
   try {
     localStorage.setItem(key, String(value));
+    return true;
   } catch {
-    /* storage unavailable */
+    return false; // storage unavailable or full
   }
 };
 const readJSON = (key, fallback) => {
@@ -120,6 +142,11 @@ const writeJSON = (key, value) => writeRaw(key, JSON.stringify(value));
 const dayKey = (d) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
+const parseKey = (k) => {
+  const [y, m, d] = k.split('-').map(Number);
+  return new Date(y, m - 1, d);
+};
+
 const calcStreak = (set) => {
   let count = 0;
   const d = new Date();
@@ -129,6 +156,24 @@ const calcStreak = (set) => {
     d.setDate(d.getDate() - 1);
   }
   return count;
+};
+
+const calcBestStreak = (sortedKeys) => {
+  let best = 0;
+  let cur = 0;
+  let prev = null;
+  sortedKeys.forEach((k) => {
+    if (prev) {
+      const next = parseKey(prev);
+      next.setDate(next.getDate() + 1);
+      cur = dayKey(next) === k ? cur + 1 : 1;
+    } else {
+      cur = 1;
+    }
+    best = Math.max(best, cur);
+    prev = k;
+  });
+  return best;
 };
 
 // If your saved chats carry a timestamp, they also count towards the streak.
@@ -156,8 +201,21 @@ const formatMonthYear = (value) => {
   return isNaN(d) ? '—' : d.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
 };
 
-const getRank = (lvl) =>
-  lvl >= 10 ? 'Legend' : lvl >= 7 ? 'Elite' : lvl >= 4 ? 'Pro' : lvl >= 2 ? 'Explorer' : 'Rookie';
+const getGreeting = () => {
+  const h = new Date().getHours();
+  if (h >= 5 && h < 12) return 'Good morning';
+  if (h >= 12 && h < 17) return 'Good afternoon';
+  if (h >= 17 && h < 22) return 'Good evening';
+  return 'Good night';
+};
+
+const getRank = (lvl) => {
+  let current = RANKS[0];
+  RANKS.forEach((r) => {
+    if (lvl >= r.min) current = r;
+  });
+  return current.name;
+};
 
 const resolveAvatar = (id, accent, isGuest) => {
   let s = AVATAR_STYLES.find((x) => x.id === id) || AVATAR_STYLES[0];
@@ -227,12 +285,14 @@ const ICONS = {
   lock: (<><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></>),
   zap: (<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />),
   download: (<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></>),
+  upload: (<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></>),
   trash: (<><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></>),
   share: (<><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" /></>),
   image: (<><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></>),
   flame: (<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />),
   award: (<><circle cx="12" cy="8" r="7" /><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88" /></>),
   grid: (<><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /></>),
+  chart: (<><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /></>),
   crown: (<><path d="M2 19h20" /><path d="M3 8l4.5 4L12 4l4.5 8L21 8l-2 11H5L3 8z" /></>),
   sliders: (<><line x1="4" y1="21" x2="4" y2="14" /><line x1="4" y1="10" x2="4" y2="3" /><line x1="12" y1="21" x2="12" y2="12" /><line x1="12" y1="8" x2="12" y2="3" /><line x1="20" y1="21" x2="20" y2="16" /><line x1="20" y1="12" x2="20" y2="3" /><line x1="1" y1="14" x2="7" y2="14" /><line x1="9" y1="8" x2="15" y2="8" /><line x1="17" y1="16" x2="23" y2="16" /></>),
   mail: (<><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" /><polyline points="22,6 12,13 2,6" /></>),
@@ -244,6 +304,11 @@ const ICONS = {
   user: (<><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></>),
   alert: (<><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></>),
   circle: (<circle cx="12" cy="12" r="10" />),
+  calendar: (<><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></>),
+  flag: (<><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" /><line x1="4" y1="22" x2="4" y2="15" /></>),
+  sun: (<><circle cx="12" cy="12" r="5" /><line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" /><line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" /><line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" /><line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" /></>),
+  moon: (<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />),
+  monitor: (<><rect x="2" y="3" width="20" height="14" rx="2" ry="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" /></>),
 };
 
 function Icon({ name, size = 18, className }) {
@@ -321,11 +386,23 @@ function Profile() {
   const [tab, setTab] = useState('overview');
   const [accentId, setAccentId] = useState(() => readRaw(LS.accent, 'violet'));
   const [avatarId, setAvatarId] = useState(() => readRaw(LS.avatar, ''));
+  const [theme, setTheme] = useState(() => {
+    const t = readRaw(LS.theme, 'dark');
+    return ['dark', 'light', 'auto'].includes(t) ? t : 'dark';
+  });
+  const [systemDark, setSystemDark] = useState(() =>
+    window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)').matches : true
+  );
   const [prefs, setPrefs] = useState(() => ({ ...DEFAULT_PREFS, ...readJSON(LS.prefs, {}) }));
 
   const [toast, setToast] = useState(null);
   const [showClear, setShowClear] = useState(false);
+  const [celebrate, setCelebrate] = useState(null);
   const toastTimer = useRef(null);
+  const fileRef = useRef(null);
+
+  const effectiveTheme = theme === 'auto' ? (systemDark ? 'dark' : 'light') : theme;
+  const isLight = effectiveTheme === 'light';
 
   /* ── Toast ── */
   const showToast = useCallback((msg, type = 'success') => {
@@ -335,6 +412,19 @@ function Profile() {
   }, []);
 
   useEffect(() => () => clearTimeout(toastTimer.current), []);
+
+  /* ── Follow the system theme when set to "Auto" ── */
+  useEffect(() => {
+    if (!window.matchMedia) return undefined;
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const onChange = (e) => setSystemDark(e.matches);
+    if (mq.addEventListener) mq.addEventListener('change', onChange);
+    else mq.addListener(onChange);
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener('change', onChange);
+      else mq.removeListener(onChange);
+    };
+  }, []);
 
   /* ── Load chats, record today's activity, listen to auth ── */
   useEffect(() => {
@@ -347,7 +437,7 @@ function Profile() {
       new Set([...(Array.isArray(stored) ? stored : []), ...chatDays(list), dayKey(new Date())])
     )
       .sort()
-      .slice(-90);
+      .slice(-400);
     writeJSON(LS.days, merged);
     setActiveDays(merged);
 
@@ -358,13 +448,34 @@ function Profile() {
     return unsubscribe;
   }, []);
 
-  /* ── Close the confirm dialog with Escape ── */
+  /* ── Level-up celebration (only when the level is higher than last time) ── */
   useEffect(() => {
-    if (!showClear) return undefined;
-    const onKey = (e) => e.key === 'Escape' && setShowClear(false);
+    if (loading) return;
+    const lvl = Math.floor(((xpBank + totalChats) * 15) / 100) + 1;
+    const seenRaw = readRaw(LS.lastLevel, '');
+    const seen = Number(seenRaw) || 0;
+    if (!seenRaw) {
+      writeRaw(LS.lastLevel, lvl); // first visit: just remember, don't celebrate
+      return;
+    }
+    if (lvl > seen) {
+      setCelebrate({ level: lvl, rank: getRank(lvl) });
+      writeRaw(LS.lastLevel, lvl);
+    }
+  }, [loading, xpBank, totalChats]);
+
+  /* ── Close dialogs with Escape ── */
+  useEffect(() => {
+    if (!showClear && !celebrate) return undefined;
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        setShowClear(false);
+        setCelebrate(null);
+      }
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [showClear]);
+  }, [showClear, celebrate]);
 
   /* ── Actions ── */
   const handleLogout = async () => {
@@ -380,11 +491,20 @@ function Profile() {
     }
   };
 
+  const changeTheme = (id) => {
+    setTheme(id);
+    writeRaw(LS.theme, id);
+    const label = THEMES.find((t) => t.id === id)?.label || 'New';
+    showToast(`${label} theme on`);
+  };
+
+  const toggleTheme = () => changeTheme(isLight ? 'dark' : 'light');
+
   const changeAccent = (id) => {
     setAccentId(id);
     writeRaw(LS.accent, id);
     const picked = ACCENTS.find((a) => a.id === id);
-    showToast(`${picked ? picked.name : 'New'} theme applied`);
+    showToast(`${picked ? picked.name : 'New'} accent applied`);
   };
 
   const changeAvatar = (id) => {
@@ -420,13 +540,57 @@ function Profile() {
     showToast('Chat history cleared');
   };
 
+  /* ── Restore chats from an exported backup file ── */
+  const handleRestore = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = ''; // lets the same file be chosen again later
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      showToast('That file is too large (max 10 MB)', 'error');
+      return;
+    }
+    try {
+      const data = JSON.parse(await file.text());
+      const incoming = Array.isArray(data) ? data : data?.chats;
+      if (!Array.isArray(incoming)) throw new Error('No chats array in file');
+
+      const current = readJSON(LS.chats, []);
+      const list = Array.isArray(current) ? current : [];
+      const seen = new Set(list.map((c) => JSON.stringify(c)));
+      const fresh = incoming.filter((c) => {
+        const k = JSON.stringify(c);
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
+
+      if (!fresh.length) {
+        showToast('No new chats found in this backup');
+        return;
+      }
+      if (!writeJSON(LS.chats, [...list, ...fresh])) {
+        showToast('Not enough browser storage to restore this backup', 'error');
+        return;
+      }
+      setTotalChats(list.length + fresh.length);
+      // These chats were already counted in XP when they were cleared, so don't count them twice.
+      const bank = Math.max(0, xpBank - fresh.length);
+      setXpBank(bank);
+      writeRaw(LS.xpBank, bank);
+      showToast(`Restored ${fresh.length} chat${fresh.length === 1 ? '' : 's'}`);
+    } catch (err) {
+      console.error('Restore failed', err);
+      showToast('That file is not a valid Aivox backup', 'error');
+    }
+  };
+
   /* ── Page state ── */
   if (loading || isLoggingOut) {
     return (
-      <div className={styles.loadingContainer}>
+      <div className={`${styles.loadingContainer} ${isLight ? styles.loadingLight : ''}`}>
         <svg className={styles.spinnerCircle} width="60" height="60" viewBox="0 0 50 50">
-          <circle cx="25" cy="25" r="20" fill="none" stroke="rgba(140, 130, 242, 0.2)" strokeWidth="4" />
-          <circle cx="25" cy="25" r="20" fill="none" stroke="#8c82f2" strokeWidth="4" strokeDasharray="30 100" strokeLinecap="round" />
+          <circle cx="25" cy="25" r="20" fill="none" stroke="currentColor" strokeOpacity="0.2" strokeWidth="4" />
+          <circle cx="25" cy="25" r="20" fill="none" stroke="currentColor" strokeWidth="4" strokeDasharray="30 100" strokeLinecap="round" />
         </svg>
         <h2 className={styles.loadingText}>
           {isLoggingOut ? 'Logging out securely…' : 'Loading profile…'}
@@ -438,7 +602,13 @@ function Profile() {
   /* ── Derived data ── */
   const isGuest = !authUser;
   const accent = ACCENTS.find((a) => a.id === accentId) || ACCENTS[0];
-  const rootStyle = { '--accent': accent.a, '--accent2': accent.b, '--accent-rgb': accent.rgb };
+  const rootStyle = {
+    '--accent': accent.a,
+    '--accent2': accent.b,
+    '--accent-deep': accent.d,
+    '--accent-ink': isLight ? accent.d : accent.b,
+    '--accent-rgb': accent.rgb,
+  };
 
   // The name is read-only: it comes from the account (or the guest session).
   const currentDisplayName = isGuest
@@ -455,9 +625,14 @@ function Profile() {
   const userLevel = Math.floor(userXP / 100) + 1;
   const xpInLevel = userXP % 100;
   const rank = getRank(userLevel);
+  const nextRank = RANKS.find((r) => r.min > userLevel);
 
+  /* ── Activity ── */
   const activeSet = new Set(activeDays);
   const streak = calcStreak(activeSet);
+  const sortedDays = Array.from(activeSet).sort();
+  const bestStreak = Math.max(calcBestStreak(sortedDays), streak);
+
   const weekDays = Array.from({ length: 7 }, (_, i) => {
     const d = new Date();
     d.setDate(d.getDate() - (6 - i));
@@ -469,6 +644,40 @@ function Profile() {
   });
   const activeThisWeek = weekDays.filter((d) => activeSet.has(d.key)).length;
 
+  const todayKey = dayKey(new Date());
+  const heatEnd = new Date();
+  heatEnd.setDate(heatEnd.getDate() + (6 - heatEnd.getDay())); // end on this week's Saturday
+  const heatDays = Array.from({ length: HEAT_WEEKS * 7 }, (_, i) => {
+    const d = new Date(heatEnd);
+    d.setDate(heatEnd.getDate() - (HEAT_WEEKS * 7 - 1 - i));
+    const key = dayKey(d);
+    return {
+      key,
+      label: d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }),
+      on: activeSet.has(key),
+      future: key > todayKey,
+      today: key === todayKey,
+    };
+  });
+  const activeInMap = heatDays.filter((d) => d.on).length;
+
+  const weekdayCounts = [0, 0, 0, 0, 0, 0, 0];
+  sortedDays.forEach((k) => {
+    weekdayCounts[parseKey(k).getDay()] += 1;
+  });
+  const favDay = sortedDays.length
+    ? WEEKDAYS[weekdayCounts.indexOf(Math.max(...weekdayCounts))]
+    : '—';
+  const perDay = sortedDays.length ? (lifetimeChats / sortedDays.length).toFixed(1) : '0';
+
+  const insights = [
+    { icon: 'flame', label: 'Best streak', value: `${bestStreak} day${bestStreak === 1 ? '' : 's'}` },
+    { icon: 'calendar', label: 'Active days', value: sortedDays.length },
+    { icon: 'star', label: 'Favourite day', value: favDay },
+    { icon: 'chart', label: 'Chats per active day', value: perDay },
+  ];
+
+  /* ── Account ── */
   const providerIds = authUser ? authUser.providerData.map((p) => p.providerId) : [];
   const hasPassword = providerIds.includes('password');
   const providerLabel = providerIds.length
@@ -478,17 +687,18 @@ function Profile() {
   const createdAt = authUser?.metadata?.creationTime;
   const lastSignIn = authUser?.metadata?.lastSignInTime;
 
+  /* ── Achievements ── */
   const rawBadges = [
     { id: 'hello', icon: 'chat', title: 'First hello', desc: 'Send your first chat', cur: lifetimeChats, goal: 1 },
     { id: 'chatter', icon: 'chat', title: 'Chatterbox', desc: 'Reach 25 chats', cur: lifetimeChats, goal: 25 },
     { id: 'master', icon: 'award', title: 'Conversation master', desc: 'Reach 100 chats', cur: lifetimeChats, goal: 100 },
     { id: 'lvl5', icon: 'zap', title: 'Rising star', desc: 'Reach level 5', cur: userLevel, goal: 5 },
-    { id: 'streak3', icon: 'flame', title: 'On fire', desc: '3-day activity streak', cur: streak, goal: 3 },
-    { id: 'streak7', icon: 'flame', title: 'Week warrior', desc: '7-day activity streak', cur: streak, goal: 7 },
+    { id: 'streak3', icon: 'flame', title: 'On fire', desc: '3-day activity streak', cur: bestStreak, goal: 3 },
+    { id: 'streak7', icon: 'flame', title: 'Week warrior', desc: '7-day activity streak', cur: bestStreak, goal: 7 },
     { id: 'secured', icon: 'shield', title: 'Secured', desc: 'Create an account', cur: isGuest ? 0 : 1, goal: 1 },
     { id: 'verified', icon: 'check', title: 'Verified', desc: 'Verify your email', cur: emailVerified ? 1 : 0, goal: 1 },
     { id: 'founder', icon: 'crown', title: 'Founding member', desc: 'Join the first 100 users', cur: isGuest ? 0 : 1, goal: 1 },
-    { id: 'stylist', icon: 'sliders', title: 'Stylist', desc: 'Change your theme or avatar', cur: accentId !== 'violet' || avatarId ? 1 : 0, goal: 1 },
+    { id: 'stylist', icon: 'sliders', title: 'Stylist', desc: 'Change your theme or avatar', cur: accentId !== 'violet' || avatarId || theme !== 'dark' ? 1 : 0, goal: 1 },
   ];
   const badges = rawBadges.map((b) => ({
     ...b,
@@ -570,7 +780,7 @@ function Profile() {
     showToast(ok ? 'Invite link copied' : 'Could not copy the link', ok ? 'success' : 'error');
   };
 
-  /* ── Shareable profile card (PNG) ── */
+  /* ── Shareable profile card (PNG) — follows the current theme ── */
   const handleShareCard = async () => {
     try {
       if (document.fonts && document.fonts.ready) await document.fonts.ready;
@@ -584,10 +794,24 @@ function Profile() {
       const font = "'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif";
       const gold = '245, 185, 66';
 
+      const P = isLight
+        ? {
+            bg1: '#f8f7ff', bg2: '#e7e5fa', name: '#15132e', soft: '#4a4d68', muted: '#6a6d88',
+            panel: 'rgba(24,22,58,0.06)', divider: 'rgba(24,22,58,0.1)', frame: 'rgba(24,22,58,0.14)',
+            pillBg: 'rgba(24,22,58,0.07)', pillBorder: 'rgba(24,22,58,0.16)', pillText: '#4a4d68',
+            goldText: '#9a6200', glowA: 0.22,
+          }
+        : {
+            bg1: '#12102a', bg2: '#08070d', name: '#ffffff', soft: '#b9bccf', muted: '#8a8d9e',
+            panel: 'rgba(255,255,255,0.05)', divider: 'rgba(255,255,255,0.08)', frame: 'rgba(255,255,255,0.14)',
+            pillBg: 'rgba(255,255,255,0.07)', pillBorder: 'rgba(255,255,255,0.18)', pillText: '#b9bccf',
+            goldText: '#f7d36a', glowA: 0.3,
+          };
+
       // Background
       const bg = ctx.createLinearGradient(0, 0, W, H);
-      bg.addColorStop(0, '#12102a');
-      bg.addColorStop(1, '#08070d');
+      bg.addColorStop(0, P.bg1);
+      bg.addColorStop(1, P.bg2);
       ctx.fillStyle = bg;
       ctx.fillRect(0, 0, W, H);
 
@@ -598,13 +822,13 @@ function Profile() {
         ctx.fillStyle = g;
         ctx.fillRect(0, 0, W, H);
       };
-      glow(1050, 60, 520, isGuest ? accent.rgb : gold, 0.3);
-      glow(80, 620, 480, accent.rgb, 0.28);
+      glow(1050, 60, 520, isGuest ? accent.rgb : gold, P.glowA);
+      glow(80, 620, 480, accent.rgb, P.glowA - 0.02);
 
       // Frame
       roundRectPath(ctx, 24, 24, W - 48, H - 48, 36);
       ctx.lineWidth = 2;
-      ctx.strokeStyle = isGuest ? 'rgba(255,255,255,0.14)' : `rgba(${gold}, 0.6)`;
+      ctx.strokeStyle = isGuest ? P.frame : `rgba(${gold}, 0.6)`;
       ctx.stroke();
 
       // Avatar
@@ -637,11 +861,11 @@ function Profile() {
         size -= 2;
         ctx.font = `800 ${size}px ${font}`;
       }
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = P.name;
       ctx.fillText(currentDisplayName, 350, 225);
 
       ctx.font = `600 28px ${font}`;
-      ctx.fillStyle = '#b9bccf';
+      ctx.fillStyle = P.soft;
       ctx.fillText(`${rank} · Level ${userLevel}`, 350, 272);
 
       // Plan pill
@@ -649,17 +873,17 @@ function Profile() {
       ctx.font = `700 22px ${font}`;
       const pw = ctx.measureText(pillText).width + 44;
       roundRectPath(ctx, 350, 300, pw, 46, 23);
-      ctx.fillStyle = isGuest ? 'rgba(255,255,255,0.07)' : `rgba(${gold}, 0.16)`;
+      ctx.fillStyle = isGuest ? P.pillBg : `rgba(${gold}, 0.18)`;
       ctx.fill();
       ctx.lineWidth = 1.5;
-      ctx.strokeStyle = isGuest ? 'rgba(255,255,255,0.18)' : `rgba(${gold}, 0.55)`;
+      ctx.strokeStyle = isGuest ? P.pillBorder : `rgba(${gold}, 0.6)`;
       ctx.stroke();
-      ctx.fillStyle = isGuest ? '#b9bccf' : '#f7d36a';
+      ctx.fillStyle = isGuest ? P.pillText : P.goldText;
       ctx.fillText(pillText, 372, 332);
 
       // Stats panel
       roundRectPath(ctx, 60, 410, W - 120, 130, 26);
-      ctx.fillStyle = 'rgba(255,255,255,0.05)';
+      ctx.fillStyle = P.panel;
       ctx.fill();
       const cardStats = [
         [String(lifetimeChats), 'Messages'],
@@ -671,25 +895,25 @@ function Profile() {
       cardStats.forEach(([value, label], i) => {
         const cx = 60 + colW * i + colW / 2;
         ctx.textAlign = 'center';
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = P.name;
         ctx.font = `800 52px ${font}`;
         ctx.fillText(value, cx, 482);
-        ctx.fillStyle = '#8a8d9e';
+        ctx.fillStyle = P.muted;
         ctx.font = `500 22px ${font}`;
         ctx.fillText(label, cx, 518);
         if (i > 0) {
-          ctx.fillStyle = 'rgba(255,255,255,0.08)';
+          ctx.fillStyle = P.divider;
           ctx.fillRect(60 + colW * i, 435, 2, 80);
         }
       });
 
       // Footer
       ctx.textAlign = 'left';
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = P.name;
       ctx.font = `800 30px ${font}`;
       ctx.fillText('Aivox', 80, 586);
       ctx.textAlign = 'right';
-      ctx.fillStyle = '#8a8d9e';
+      ctx.fillStyle = P.muted;
       ctx.font = `500 22px ${font}`;
       ctx.fillText(formatDate(new Date()), W - 80, 584);
 
@@ -723,6 +947,7 @@ function Profile() {
 
   const pageClass = [
     styles.page,
+    isLight ? styles.themeLight : styles.themeDark,
     prefs.reduceMotion ? styles.noMotion : '',
     prefs.compact ? styles.compact : '',
   ].join(' ');
@@ -740,10 +965,20 @@ function Profile() {
             <Icon name="back" size={17} /> <span>Back to chat</span>
           </button>
           <span className={styles.topTitle}>My profile</span>
-          <button className={styles.topLogout} onClick={handleLogout} aria-label={isGuest ? 'Leave session' : 'Log out'}>
-            <Icon name="logout" size={17} />
-            <span className={styles.hideSm}>{isGuest ? 'Leave session' : 'Log out'}</span>
-          </button>
+          <div className={styles.topActions}>
+            <button
+              className={styles.themeBtn}
+              onClick={toggleTheme}
+              aria-label={isLight ? 'Switch to dark theme' : 'Switch to light theme'}
+              title={isLight ? 'Switch to dark theme' : 'Switch to light theme'}
+            >
+              <Icon name={isLight ? 'moon' : 'sun'} size={17} />
+            </button>
+            <button className={styles.topLogout} onClick={handleLogout} aria-label={isGuest ? 'Leave session' : 'Log out'}>
+              <Icon name="logout" size={17} />
+              <span className={styles.hideSm}>{isGuest ? 'Leave session' : 'Log out'}</span>
+            </button>
+          </div>
         </header>
 
         <main className={styles.container}>
@@ -776,6 +1011,7 @@ function Profile() {
               </div>
 
               <div className={styles.heroInfo}>
+                <p className={styles.greeting}>{getGreeting()}</p>
                 <h1 className={styles.name}>{currentDisplayName}</h1>
                 <p className={styles.email}>
                   {isGuest ? 'Free basic account' : authUser.email || 'Signed in'}
@@ -805,7 +1041,7 @@ function Profile() {
 
               <div className={styles.heroLevel} aria-label={`Level ${userLevel}, ${xpInLevel} of 100 XP`}>
                 <div className={styles.ring}>
-                  <svg viewBox="0 0 80 80" width="92" height="92">
+                  <svg viewBox="0 0 80 80" width="96" height="96">
                     <defs>
                       <linearGradient id="aivoxRingGrad" x1="0" y1="0" x2="1" y2="1">
                         <stop offset="0%" style={{ stopColor: 'var(--accent)' }} />
@@ -961,6 +1197,49 @@ function Profile() {
               </div>
             )}
 
+            {/* ════════ ACTIVITY ════════ */}
+            {tab === 'activity' && (
+              <div className={styles.stack}>
+                <div className={styles.insights}>
+                  {insights.map((i) => (
+                    <div key={i.label} className={styles.insight}>
+                      <span className={styles.insightIcon}><Icon name={i.icon} size={18} /></span>
+                      <div className={styles.insightValue}>{i.value}</div>
+                      <div className={styles.insightLabel}>{i.label}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <section className={styles.card}>
+                  <CardHead icon="calendar" title="Activity map" tag={`Last ${HEAT_WEEKS} weeks`} />
+                  <div className={styles.heatWrap}>
+                    <div className={styles.heat} role="img" aria-label={`Active on ${activeInMap} days in the last ${HEAT_WEEKS} weeks`}>
+                      {heatDays.map((d) => (
+                        <span
+                          key={d.key}
+                          title={`${d.label}${d.on ? ' · active' : ''}`}
+                          className={[
+                            styles.cell,
+                            d.on ? styles.cellOn : '',
+                            d.today ? styles.cellToday : '',
+                            d.future ? styles.cellFuture : '',
+                          ].join(' ')}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  <div className={styles.legend}>
+                    <span><i className={styles.legendDot} /> Inactive</span>
+                    <span><i className={`${styles.legendDot} ${styles.legendOn}`} /> Active</span>
+                  </div>
+                  <p className={styles.cardNote}>
+                    You were active on <strong>{activeInMap}</strong> day{activeInMap === 1 ? '' : 's'} in
+                    this period. Open Aivox daily to light up more squares.
+                  </p>
+                </section>
+              </div>
+            )}
+
             {/* ════════ SUBSCRIPTION (premium) ════════ */}
             {tab === 'plan' && !isGuest && (
               <div className={styles.stack}>
@@ -1112,6 +1391,43 @@ function Profile() {
             {tab === 'badges' && (
               <div className={styles.stack}>
                 <section className={styles.card}>
+                  <CardHead
+                    icon="flag"
+                    title="Rank roadmap"
+                    tag={
+                      nextRank
+                        ? `${nextRank.min - userLevel} level${nextRank.min - userLevel === 1 ? '' : 's'} to ${nextRank.name}`
+                        : 'Top rank reached'
+                    }
+                  />
+                  <ol className={styles.roadmap}>
+                    {RANKS.map((r, i) => {
+                      const reached = userLevel >= r.min;
+                      const linked = RANKS[i + 1] && userLevel >= RANKS[i + 1].min;
+                      return (
+                        <li
+                          key={r.name}
+                          className={[
+                            styles.step,
+                            reached ? styles.stepDone : '',
+                            r.name === rank ? styles.stepNow : '',
+                            linked ? styles.stepLinked : '',
+                          ].join(' ')}
+                        >
+                          <span className={styles.stepDot}>
+                            <Icon name={reached ? 'check' : 'lock'} size={14} />
+                          </span>
+                          <span className={styles.stepText}>
+                            <strong>{r.name}</strong>
+                            <small>Level {r.min}+ · {r.blurb}</small>
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                </section>
+
+                <section className={styles.card}>
                   <CardHead icon="award" title="Achievements" tag={`${unlockedCount} of ${badges.length} unlocked`} />
                   <div className={styles.xpTrack}>
                     <div
@@ -1120,6 +1436,7 @@ function Profile() {
                     />
                   </div>
                 </section>
+
                 <div className={styles.badgeGrid}>
                   {badges.map((b) => (
                     <div key={b.id} className={`${styles.badge} ${b.done ? styles.badgeDone : ''}`}>
@@ -1152,6 +1469,21 @@ function Profile() {
                 <section className={styles.card}>
                   <CardHead icon="sliders" title="Appearance" />
 
+                  <p className={styles.groupLabel}>Theme</p>
+                  <div className={styles.segment} role="radiogroup" aria-label="Theme">
+                    {THEMES.map((t) => (
+                      <button
+                        key={t.id}
+                        role="radio"
+                        aria-checked={theme === t.id}
+                        className={`${styles.segBtn} ${theme === t.id ? styles.segOn : ''}`}
+                        onClick={() => changeTheme(t.id)}
+                      >
+                        <Icon name={t.icon} size={15} /> {t.label}
+                      </button>
+                    ))}
+                  </div>
+
                   <p className={styles.groupLabel}>Accent colour</p>
                   <div className={styles.swatches}>
                     {ACCENTS.map((a) => (
@@ -1160,7 +1492,7 @@ function Profile() {
                         className={`${styles.swatch} ${a.id === accent.id ? styles.swatchOn : ''}`}
                         style={{ background: `linear-gradient(135deg, ${a.a}, ${a.b})` }}
                         onClick={() => changeAccent(a.id)}
-                        aria-label={`${a.name} theme`}
+                        aria-label={`${a.name} accent`}
                         aria-pressed={a.id === accent.id}
                         title={a.name}
                       >
@@ -1261,6 +1593,22 @@ function Profile() {
                       Export
                     </button>
                   </SettingRow>
+                  <SettingRow icon="upload" title="Restore a backup" desc="Add chats back from an exported file">
+                    <button
+                      className={`${styles.btn} ${styles.btnGhost} ${styles.btnSm}`}
+                      onClick={() => fileRef.current && fileRef.current.click()}
+                    >
+                      Restore
+                    </button>
+                  </SettingRow>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept="application/json,.json"
+                    className={styles.fileInput}
+                    onChange={handleRestore}
+                    aria-label="Choose a backup file"
+                  />
                   <SettingRow icon="trash" title="Clear chat history" desc={`${totalChats} saved on this device`}>
                     <button
                       className={`${styles.btn} ${styles.btnDanger} ${styles.btnSm}`}
@@ -1298,7 +1646,7 @@ function Profile() {
             <h3 id="clearTitle">Clear chat history?</h3>
             <p>
               This deletes the {totalChats} chat{totalChats === 1 ? '' : 's'} saved on this device.
-              Your level and achievements stay safe. This cannot be undone.
+              Your level and achievements stay safe. You can restore a backup later if you exported one.
             </p>
             <div className={styles.modalActions}>
               <button className={`${styles.btn} ${styles.btnGhost}`} onClick={() => setShowClear(false)}>
@@ -1308,6 +1656,45 @@ function Profile() {
                 Clear history
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Level-up celebration ─── */}
+      {celebrate && (
+        <div className={styles.overlay} onClick={() => setCelebrate(null)}>
+          <div
+            className={`${styles.modal} ${styles.celebrate}`}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="lvlTitle"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className={styles.confetti} aria-hidden="true">
+              {Array.from({ length: 28 }, (_, i) => (
+                <i
+                  key={i}
+                  style={{
+                    left: `${(i * 37) % 100}%`,
+                    width: `${6 + (i % 4) * 2}px`,
+                    height: `${10 + (i % 3) * 3}px`,
+                    background: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+                    '--delay': `${(i % 7) * 0.12}s`,
+                    '--dur': `${2.2 + (i % 5) * 0.35}s`,
+                    '--spin': `${(i % 2 ? 1 : -1) * (240 + i * 12)}deg`,
+                  }}
+                />
+              ))}
+            </div>
+            <span className={styles.lvlBadge}>{celebrate.level}</span>
+            <h3 id="lvlTitle">Level up!</h3>
+            <p>
+              You reached level {celebrate.level} and the <strong>{celebrate.rank}</strong> rank.
+              Keep chatting to unlock more.
+            </p>
+            <button className={`${styles.btn} ${styles.btnPrimary} ${styles.btnWide}`} onClick={() => setCelebrate(null)}>
+              Awesome
+            </button>
           </div>
         </div>
       )}
