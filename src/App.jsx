@@ -52,6 +52,24 @@ const GROQ_VISION_MODEL = 'qwen/qwen3.8-27b';
 const GEMINI_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.8-flash']; 
 const OPENROUTER_MODEL = 'openrouter/free';        
 
+// 🔢 PROVIDER ORDER: yahan number badlo, bas itna hi.
+// Jis provider ka number sabse chhota (1) wo pehle chalega, fail hua toh 2, phir 3...
+// 0 likhoge toh wo provider chalega hi nahi (skip).
+// (Abhi ka order wahi hai jo pehle tha: Mistral -> Groq -> Gemini -> OpenRouter)
+const PROVIDER_ORDER = {
+  github: 0,       // band (GitHub Models retire ho chuka hai)
+  mistral: 4,
+  groq: 2,
+  gemini: 1,
+  openrouter: 3,
+};
+
+// Upar ke numbers se order ek baar hi ban jata hai (har message par dobara nahi banta)
+const ACTIVE_PROVIDERS = Object.entries(PROVIDER_ORDER)
+  .filter(([, order]) => Number(order) > 0)
+  .sort((a, b) => Number(a[1]) - Number(b[1]))
+  .map(([name]) => name);
+
 const isUsableHistoryMsg = (msg) =>
   msg && typeof msg.text === 'string' && msg.text.trim() !== '' && !msg.text.startsWith('⚠️ Unable to connect');
 
@@ -508,32 +526,48 @@ function AppMain() {
     let finalModel = "";
     const startTime = Date.now(); 
 
-    try {
-      // 🔧 GitHub Models is retired (30 Jul 2026)
-      if (!GITHUB_MODELS_ENABLED) throw new Error("GitHub Models retired by GitHub on 30 Jul 2026 - skipped");
+    // 🔢 getRelevantHistory ab sirf ek baar chalta hai (jis provider ko pehle zarurat padti hai usi waqt),
+    // baaki providers wahi result use karte hain. Input/output bilkul pehle jaisa hi hai.
+    let smartHistoryCache = null;
+    let smartHistoryReady = false;
+    const getHistoryOnce = () => {
+      if (!smartHistoryReady) {
+        smartHistoryCache = getRelevantHistory(textToProcess, messages);
+        smartHistoryReady = true;
+      }
+      return smartHistoryCache;
+    };
 
-      const smartHistory = getRelevantHistory(textToProcess, messages);
-      const formattedHistory = toOpenAIHistory(smartHistory);
-      const userMessage = buildOpenAIVisionMessage(textToProcess, imagePart);
-      
-      const ghResponse = await fetch(BACKEND_URL, {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
-            provider: "github", 
-            endpoint: "https://models.inference.ai.azure.com/chat/completions",
-            payload: { body: { model: "gpt-4o-mini", messages: [{ role: "system", content: systemPrompt }, ...formattedHistory, userMessage], max_tokens: 250, temperature: isActuallyRoasting ? 0.8 : 0.4 } }
-          })
-      });
-      const ghData = await ghResponse.json();
-      if (!ghResponse.ok) throw new Error(ghData.error || "GitHub API failed");
-      finalResponse = extractReply(ghData);
-      finalModel = imagePart ? "GPT-4o-mini Vision (GitHub)" : "GPT-4o-mini (GitHub)";
-      
-    } catch (githubError) {
-      console.log("GitHub failed, trying Next...", githubError.message);
-      try {
+    // 🔢 Har provider ka apna chhota function. Andar ka payload, model, max_tokens, temperature sab pehle jaisa hi hai.
+    // Success par { text, model } return karta hai, fail par error throw karta hai (agla provider chalega).
+    const providerRunners = {
+      github: async () => {
+        // 🔧 GitHub Models is retired (30 Jul 2026)
+        if (!GITHUB_MODELS_ENABLED) throw new Error("GitHub Models retired by GitHub on 30 Jul 2026 - skipped");
+
+        const smartHistory = getHistoryOnce();
+        const formattedHistory = toOpenAIHistory(smartHistory);
+        const userMessage = buildOpenAIVisionMessage(textToProcess, imagePart);
+        
+        const ghResponse = await fetch(BACKEND_URL, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ 
+              provider: "github", 
+              endpoint: "https://models.inference.ai.azure.com/chat/completions",
+              payload: { body: { model: "gpt-4o-mini", messages: [{ role: "system", content: systemPrompt }, ...formattedHistory, userMessage], max_tokens: 250, temperature: isActuallyRoasting ? 0.8 : 0.4 } }
+            })
+        });
+        const ghData = await ghResponse.json();
+        if (!ghResponse.ok) throw new Error(ghData.error || "GitHub API failed");
+        return {
+          text: extractReply(ghData),
+          model: imagePart ? "GPT-4o-mini Vision (GitHub)" : "GPT-4o-mini (GitHub)"
+        };
+      },
+
+      mistral: async () => {
         if (imagePart) throw new Error("Skipping Mistral for Image/Vision support");
-        const smartHistory = getRelevantHistory(textToProcess, messages);
+        const smartHistory = getHistoryOnce();
         const formattedHistory = toOpenAIHistory(smartHistory);
         
         const mistralResponse = await fetch(BACKEND_URL, {
@@ -546,115 +580,125 @@ function AppMain() {
         });
         const mistralData = await mistralResponse.json();
         if (!mistralResponse.ok) throw new Error(`Mistral API failed`);
-        finalResponse = extractReply(mistralData);
-        finalModel = "Mistral-Small";
+        return { text: extractReply(mistralData), model: "Mistral-Small" };
+      },
 
-      } catch (mistralError) {
-        console.log("Mistral failed, trying Groq...", mistralError.message);
-        try {
-          const smartHistory = getRelevantHistory(textToProcess, messages);
-          const formattedHistory = toOpenAIHistory(smartHistory);
-          const userMessage = buildOpenAIVisionMessage(textToProcess, imagePart);
-          
-          const groqModelConfig = imagePart
-            ? { model: GROQ_VISION_MODEL, reasoning_effort: "none", max_completion_tokens: 400 }
-            : { model: GROQ_TEXT_MODEL, reasoning_effort: "low", include_reasoning: false, max_completion_tokens: 1024 };
-          
-          const groqResponse = await fetch(BACKEND_URL, {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ 
-              provider: "groq", 
-              endpoint: "https://api.groq.com/openai/v1/chat/completions",
-              payload: { body: { ...groqModelConfig, messages: [{ role: "system", content: systemPrompt }, ...formattedHistory, userMessage], temperature: isActuallyRoasting ? 0.8 : 0.4 } }
-            })
-          });
-          const groqData = await groqResponse.json();
-          if (!groqResponse.ok) throw new Error(`Groq API Limit/Failed`);
-          finalResponse = extractReply(groqData);
-          finalModel = imagePart ? "Qwen3.8-Vision (Groq)" : "GPT-OSS-20B (Groq)";
+      groq: async () => {
+        const smartHistory = getHistoryOnce();
+        const formattedHistory = toOpenAIHistory(smartHistory);
+        const userMessage = buildOpenAIVisionMessage(textToProcess, imagePart);
+        
+        const groqModelConfig = imagePart
+          ? { model: GROQ_VISION_MODEL, reasoning_effort: "none", max_completion_tokens: 400 }
+          : { model: GROQ_TEXT_MODEL, reasoning_effort: "low", include_reasoning: false, max_completion_tokens: 1024 };
+        
+        const groqResponse = await fetch(BACKEND_URL, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            provider: "groq", 
+            endpoint: "https://api.groq.com/openai/v1/chat/completions",
+            payload: { body: { ...groqModelConfig, messages: [{ role: "system", content: systemPrompt }, ...formattedHistory, userMessage], temperature: isActuallyRoasting ? 0.8 : 0.4 } }
+          })
+        });
+        const groqData = await groqResponse.json();
+        if (!groqResponse.ok) throw new Error(`Groq API Limit/Failed`);
+        return {
+          text: extractReply(groqData),
+          model: imagePart ? "Qwen3.8-Vision (Groq)" : "GPT-OSS-20B (Groq)"
+        };
+      },
 
-        } catch (groqError) {
-          console.log("Groq failed, trying Gemini...", groqError.message);
+      gemini: async () => {
+        const smartHistory = getHistoryOnce();
+        const { history: geminiHistory, carry: geminiCarry } = toGeminiHistory(smartHistory);
+        const geminiOutgoingText = geminiCarry ? `${geminiCarry}\n${textToProcess}` : textToProcess;
+        const messageParts = imagePart ? [geminiOutgoingText || "Explain this image.", imagePart] : [geminiOutgoingText];
+
+        let geminiLastError = null;
+        for (const geminiModelName of GEMINI_MODELS) {
           try {
-            const smartHistory = getRelevantHistory(textToProcess, messages);
-            const { history: geminiHistory, carry: geminiCarry } = toGeminiHistory(smartHistory);
-            const geminiOutgoingText = geminiCarry ? `${geminiCarry}\n${textToProcess}` : textToProcess;
-            const messageParts = imagePart ? [geminiOutgoingText || "Explain this image.", imagePart] : [geminiOutgoingText];
-
-            let geminiLastError = null;
-            for (const geminiModelName of GEMINI_MODELS) {
-              try {
-                const geminiResponse = await fetch(BACKEND_URL, {
-                  method: "POST", headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    provider: "gemini",
-                    payload: {
-                      modelConfig: { 
-                        model: geminiModelName, 
-                        systemInstruction: systemPrompt, 
-                        generationConfig: { maxOutputTokens: 1024, temperature: isActuallyRoasting ? 0.8 : 0.4 },
-                        safetySettings: [
-                          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-                          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-                          { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-                          { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
-                        ]
-                      },
-                      history: geminiHistory,
-                      messageParts: messageParts
-                    }
-                  })
-                });
-
-                const geminiData = await geminiResponse.json();
-                if (!geminiResponse.ok) throw new Error(geminiData.error || "Gemini backend error");
-
-                const geminiText = geminiData.text;
-                if (!geminiText || !geminiText.trim()) throw new Error("Empty Gemini response");
-
-                finalResponse = geminiText;
-                finalModel = imagePart ? "Gemini Vision" : "Gemini";
-                geminiLastError = null;
-                break;
-              } catch (singleGeminiError) {
-                geminiLastError = singleGeminiError;
-                console.log(`Gemini model ${geminiModelName} failed...`, singleGeminiError.message);
-              }
-            }
-            if (geminiLastError) throw geminiLastError;
-
-          } catch (geminiError) {
-            console.log("Gemini failed, trying OpenRouter as Last Resort...", geminiError.message);
-            try {
-                const smartHistory = getRelevantHistory(textToProcess, messages);
-                const formattedHistory = toOpenAIHistory(smartHistory);
-                const userMessage = buildOpenAIVisionMessage(textToProcess, imagePart);
-                
-                const orResponse = await fetch(BACKEND_URL, {
-                    method: "POST", headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ 
-                      provider: "openrouter",
-                      endpoint: "https://openrouter.ai/api/v1/chat/completions",
-                      payload: { body: { model: OPENROUTER_MODEL, messages: [{ role: "system", content: systemPrompt }, ...formattedHistory, userMessage], max_tokens: 1000, temperature: isActuallyRoasting ? 0.8 : 0.4 } }
-                    })
-                });
-                const orData = await orResponse.json();
-                if (!orResponse.ok) throw new Error(`OpenRouter API limits reached`);
-                
-                if (orData.choices && orData.choices[0]) {
-                  finalResponse = extractReply(orData);
-                  finalModel = imagePart ? "Free Router Vision (OpenRouter)" : "Free Router (OpenRouter)";
-                } else {
-                  throw new Error("Invalid OpenRouter Response");
+            const geminiResponse = await fetch(BACKEND_URL, {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                provider: "gemini",
+                payload: {
+                  modelConfig: { 
+                    model: geminiModelName, 
+                    systemInstruction: systemPrompt, 
+                    generationConfig: { maxOutputTokens: 1024, temperature: isActuallyRoasting ? 0.8 : 0.4 },
+                    safetySettings: [
+                      { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+                      { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+                      { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+                      { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+                    ]
+                  },
+                  history: geminiHistory,
+                  messageParts: messageParts
                 }
-                
-            } catch (finalError) {
-                console.error("ALL 5 APIs FAILED! 💀", finalError);
-                finalResponse = "⚠️ Unable to connect to the servers right now. Please try again in a minute.";
-                finalModel = "Failed";
-            }
+              })
+            });
+
+            const geminiData = await geminiResponse.json();
+            if (!geminiResponse.ok) throw new Error(geminiData.error || "Gemini backend error");
+
+            const geminiText = geminiData.text;
+            if (!geminiText || !geminiText.trim()) throw new Error("Empty Gemini response");
+
+            return { text: geminiText, model: imagePart ? "Gemini Vision" : "Gemini" };
+          } catch (singleGeminiError) {
+            geminiLastError = singleGeminiError;
+            console.log(`Gemini model ${geminiModelName} failed...`, singleGeminiError.message);
           }
         }
+        throw geminiLastError || new Error("No Gemini model available");
+      },
+
+      openrouter: async () => {
+        const smartHistory = getHistoryOnce();
+        const formattedHistory = toOpenAIHistory(smartHistory);
+        const userMessage = buildOpenAIVisionMessage(textToProcess, imagePart);
+        
+        const orResponse = await fetch(BACKEND_URL, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ 
+              provider: "openrouter",
+              endpoint: "https://openrouter.ai/api/v1/chat/completions",
+              payload: { body: { model: OPENROUTER_MODEL, messages: [{ role: "system", content: systemPrompt }, ...formattedHistory, userMessage], max_tokens: 1000, temperature: isActuallyRoasting ? 0.8 : 0.4 } }
+            })
+        });
+        const orData = await orResponse.json();
+        if (!orResponse.ok) throw new Error(`OpenRouter API limits reached`);
+        
+        if (orData.choices && orData.choices[0]) {
+          return {
+            text: extractReply(orData),
+            model: imagePart ? "Free Router Vision (OpenRouter)" : "Free Router (OpenRouter)"
+          };
+        }
+        throw new Error("Invalid OpenRouter Response");
+      },
+    };
+
+    try {
+      // 🔢 PROVIDER_ORDER ke number ke hisaab se ek-ek karke try hoga (0 wale skip). Pehla jo chal gaya wahi jawab.
+      let gotResponse = false;
+      for (const providerName of ACTIVE_PROVIDERS) {
+        try {
+          const result = await providerRunners[providerName]();
+          finalResponse = result.text;
+          finalModel = result.model;
+          gotResponse = true;
+          break;
+        } catch (providerError) {
+          console.log(`${providerName} failed, trying Next...`, providerError?.message);
+        }
+      }
+
+      if (!gotResponse) {
+        console.error("ALL ACTIVE APIs FAILED! 💀");
+        finalResponse = "⚠️ Unable to connect to the servers right now. Please try again in a minute.";
+        finalModel = "Failed";
       }
     } finally {
       const timeTakenMs = Date.now() - startTime; 
