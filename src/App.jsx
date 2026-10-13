@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect, Component } from 'react';
-import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
 import ReactMarkdown from 'react-markdown';
 import { trackUserActivity, onPromptStart, onPromptKey } from './utils/tracker'; 
 import { getSystemPrompt } from './utils/aiConfig'; 
@@ -41,18 +40,18 @@ const markAppBooted = () => {
 
 // ===== AI HELPERS START (Oct 2026 fix) =====
 
+// 🔥 NAYA SECURE BACKEND URL 🔥
+const BACKEND_URL = 'https://us-central1-aivox-10db2.cloudfunctions.net/secureAIProxy';
+
 // 🔧 GitHub Models was permanently shut down by GitHub on 30 Jul 2026.
-// The old endpoint (models.inference.ai.azure.com) no longer resolves (ERR_NAME_NOT_RESOLVED).
-// Code is kept below, but disabled so it doesn't waste time / spam the console on every message.
 const GITHUB_MODELS_ENABLED = false;
 
-// 🔧 Updated model names (the old ones were retired by their providers)
-const GROQ_TEXT_MODEL = 'openai/gpt-oss-20b';      // old: llama-3.1-8b-instant (retired 16 Aug 2026)
-const GROQ_VISION_MODEL = 'qwen/qwen3.8-27b';      // old: llama-3.2-11b-vision-preview (retired Apr 2025)
-const GEMINI_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.8-flash']; // old: gemini-1.5-flash (retired)
-const OPENROUTER_MODEL = 'openrouter/free';        // old: meta-llama/llama-3.x-instruct:free (removed). Router auto-picks a working free model (text + vision)
+// 🔧 Updated model names
+const GROQ_TEXT_MODEL = 'openai/gpt-oss-20b';      
+const GROQ_VISION_MODEL = 'qwen/qwen3.8-27b';      
+const GEMINI_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.8-flash']; 
+const OPENROUTER_MODEL = 'openrouter/free';        
 
-// Failed "⚠️ Unable to connect" bubbles and empty messages should never be sent back to the AI as context
 const isUsableHistoryMsg = (msg) =>
   msg && typeof msg.text === 'string' && msg.text.trim() !== '' && !msg.text.startsWith('⚠️ Unable to connect');
 
@@ -62,7 +61,7 @@ const toOpenAIHistory = (history) => {
     const role = msg.role === 'ai' ? 'assistant' : 'user';
     const last = cleaned[cleaned.length - 1];
     if (last && last.role === role) {
-      last.content += '\n' + msg.text; // some providers reject two same-role messages in a row
+      last.content += '\n' + msg.text; 
     } else {
       cleaned.push({ role, content: msg.text });
     }
@@ -70,12 +69,6 @@ const toOpenAIHistory = (history) => {
   return cleaned;
 };
 
-// 🔧 Gemini rule: history must START with 'user' and strictly alternate user/model.
-// (The default "Hello! Main Aivox hoon" greeting is an AI message, which caused:
-//  "First content should be with role 'user', got model")
-// Returns { history, carry }. 'carry' = any unanswered user text sitting at the very end of the history
-// (e.g. a message whose request failed). It can't live in the history right before the new user message,
-// so it is added in front of the outgoing message instead of being thrown away.
 const toGeminiHistory = (history) => {
   const cleaned = [];
   for (const msg of (history || []).filter(isUsableHistoryMsg)) {
@@ -95,7 +88,6 @@ const toGeminiHistory = (history) => {
   return { history: cleaned, carry };
 };
 
-// Throws if the model returned an empty reply, so the next provider in the chain gets tried
 const extractReply = (data) => {
   const text = data?.choices?.[0]?.message?.content;
   if (!text || !String(text).trim()) throw new Error('Empty response from model');
@@ -105,8 +97,6 @@ const extractReply = (data) => {
 // ===== AI HELPERS END =====
 
 // ===== CHAT HISTORY HELPERS START =====
-// 🗂️ Har mode ki apni alag chat history (localStorage key).
-// Normal mode purani key 'aivox_chat_history' hi use karta hai, taaki purani chat safe rahe.
 const CHAT_KEYS = {
   smart: 'aivox_chat_history',
   savage: 'aivox_roaster_chat_history',
@@ -115,12 +105,11 @@ const CHAT_KEYS = {
   lover_girl: 'aivox_gf_chat_history',
   lover_boy: 'aivox_bf_chat_history',
 };
-const LEGACY_LOVE_KEY = 'aivox_love_chat_history';      // purani (gf + bf mixed) love chat
+const LEGACY_LOVE_KEY = 'aivox_love_chat_history';      
 const LOVE_MIGRATED_FLAG = 'aivox_love_chat_migrated';
 
 const getChatKey = (ego) => CHAT_KEYS[ego] || CHAT_KEYS.smart;
 
-// Storage full ho jaye toh app crash na ho: pehle poori chat save karo, nahi toh photos hata ke
 const saveChatSafely = (key, msgs) => {
   try {
     localStorage.setItem(key, JSON.stringify(msgs));
@@ -133,7 +122,6 @@ const saveChatSafely = (key, msgs) => {
   }
 };
 
-// Reply aane se pehle user ne mode badal diya ho toh reply uski original chat mein hi jodo
 const appendToSavedChat = (key, msg) => {
   try {
     const arr = JSON.parse(localStorage.getItem(key) || '[]');
@@ -143,26 +131,24 @@ const appendToSavedChat = (key, msg) => {
   }
 };
 
-// Saved chat padho. Kuch nahi mila / kharab data mila -> null (caller default greeting dikhayega)
 const readSavedChat = (ego) => {
   try {
     const key = getChatKey(ego);
     let saved = localStorage.getItem(key);
 
-    // One-time: purani mixed love chat ko pehle khulne wale love mode (gf ya bf) mein le aao
     if (!saved && (ego === 'lover_girl' || ego === 'lover_boy')) {
       const legacy = localStorage.getItem(LEGACY_LOVE_KEY);
       if (legacy && !localStorage.getItem(LOVE_MIGRATED_FLAG)) {
         localStorage.setItem(LOVE_MIGRATED_FLAG, ego);
         saved = legacy;
-        try { localStorage.setItem(key, legacy); } catch { /* storage full: abhi sirf dikhao */ }
+        try { localStorage.setItem(key, legacy); } catch { }
       }
     }
 
     if (!saved) return null;
     const parsed = JSON.parse(saved);
     if (!Array.isArray(parsed)) return null;
-    // Kharab / adhoori messages se app crash na ho (text hamesha string rahe)
+    
     const safe = parsed
       .filter((m) => m && typeof m === 'object')
       .map((m) => ({ ...m, text: typeof m.text === 'string' ? m.text : '' }));
@@ -194,8 +180,6 @@ function AppMain() {
   const plusMenuRef = useRef(null); 
 
   const [showClearModal, setShowClearModal] = useState(false);
-  
-  // 🔥 NEW: LOVE MODE MODAL STATE 🔥
   const [showLoveModal, setShowLoveModal] = useState(false);
   
   // 🔥 PLG: NAME MODAL & SIGNUP HOOK STATES 🔥
@@ -215,10 +199,8 @@ function AppMain() {
 
   const getCurrentTime = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-  // 🗂️ Abhi screen par jo chat hai wo kis localStorage key ki hai (mode badalte hi ye badalta hai)
   const chatKeyRef = useRef(getChatKey(localStorage.getItem('aivox_alter_ego') || 'smart'));
 
-  // Naye / khaali mode ki default greeting wali chat
   const buildDefaultChat = (ego) => {
     const defaultGreeting = ego === 'lover_girl' ? 'Kaise ho babu? ❤️'
       : ego === 'lover_boy' ? 'Kaisi ho meri jaan? ❤️'
@@ -235,11 +217,6 @@ function AppMain() {
   const chatEndRef = useRef(null);
   const inputRef = useRef(null);
   const chatContainerRef = useRef(null);
-
-  const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY;
-  const groqApiKey = import.meta.env.VITE_GROQ_API_KEY;
-  const openRouterApiKey = import.meta.env.VITE_OPENROUTER_API_KEY;
-  const mistralApiKey = import.meta.env.VITE_MISTRAL_API_KEY; 
 
   const egoDetails = {
     smart: { name: "Normal Mode", shortName: "Aivox ", color: "#8c82f2", bg: "rgba(140, 130, 242, 0.15)", icon: "✨" },
@@ -259,7 +236,6 @@ function AppMain() {
     };
     setIsMobile(mediaQuery.matches);
     setIsSidebarOpen(!mediaQuery.matches);
-    // Purane Safari / WebView mein addEventListener nahi hota (sirf addListener) -> pehle crash hota tha
     if (mediaQuery.addEventListener) mediaQuery.addEventListener('change', handleMobileChange);
     else if (mediaQuery.addListener) mediaQuery.addListener(handleMobileChange);
     return () => {
@@ -268,11 +244,9 @@ function AppMain() {
     };
   }, []);
 
-  // 🔧 FIX: Firebase agar 3 sec mein jawab na de (slow net / blocked storage) toh
-  // "Waking up Aivox..." screen par hamesha ke liye atke nahi rahenge.
   useEffect(() => {
     const finishAuthCheck = () => {
-      markAppBooted();            // ab is session mein start animation dobara nahi dikhegi
+      markAppBooted();            
       setIsAuthChecking(false);
     };
 
@@ -288,13 +262,11 @@ function AppMain() {
           finishAuthCheck();
         },
         () => {
-          // Auth error aaye tab bhi app khul jaye
           clearTimeout(authTimeout);
           finishAuthCheck();
         }
       );
     } catch (err) {
-      // Firebase init hi fail ho gaya toh bhi blank screen nahi, app guest mode mein khulega
       console.error('Auth init failed', err);
       clearTimeout(authTimeout);
       finishAuthCheck();
@@ -316,11 +288,9 @@ function AppMain() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // 🔥 THE FIX: Prevent navigation loader from getting stuck on Browser Back button (bfcache)
   useEffect(() => {
     const handlePageShow = (event) => {
       if (event.persisted) {
-        // Agar page browser ke cache (back button) se load ho raha hai, toh loader hata do
         setNavLoadingState({ isLoading: false, label: '' });
       }
     };
@@ -328,7 +298,6 @@ function AppMain() {
     return () => window.removeEventListener('pageshow', handlePageShow);
   }, []);
 
-  // 🗂️ Mode ki apni chat load karo (nahi mili toh default greeting)
   const loadChatHistory = (newEgo) => {
     chatKeyRef.current = getChatKey(newEgo);
     setMessages(readSavedChat(newEgo) || buildDefaultChat(newEgo));
@@ -347,7 +316,6 @@ function AppMain() {
     return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
-  // 🗂️ Chat hamesha usi mode ki key mein save hoti hai jiski wo hai (chatKeyRef)
   useEffect(() => { 
     saveChatSafely(chatKeyRef.current, messages);
   }, [messages]);
@@ -363,14 +331,10 @@ function AppMain() {
   const scrollToBottom = () => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   const showToast = (msg) => { setToastMsg(msg); setTimeout(() => setToastMsg(''), 3000); };
 
-  // 🔧 displayName null ho sakta hai (email signup / Google profile bina naam ke) -> pehle .charAt() par crash = blank screen
   const currentDisplayName = authUser
     ? (authUser.displayName || (authUser.email ? authUser.email.split('@')[0] : '') || 'User')
     : (guestName || 'User');
 
-  // 🔧 FIX: Seedha navigate, koi fake delay / fake loader nahi.
-  // (Purana 1.5 sec ka setTimeout hata diya. Baaki jagah handleSmoothNavigate('/features', 'Features')
-  //  waise hi chalega, extra label argument ignore ho jata hai.)
   const handleSmoothNavigate = (path) => {
     if (isMobile) setIsSidebarOpen(false);
     window.location.href = path;
@@ -436,14 +400,13 @@ function AppMain() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  // 🔥 NEW FEATURE: IMAGE PASTE LOGIC 🔥
   const handlePaste = async (e) => {
     const items = e.clipboardData?.items;
     if (!items) return;
 
     for (let i = 0; i < items.length; i++) {
       if (items[i].type.indexOf('image') !== -1) {
-        e.preventDefault(); // Default text paste ko roko
+        e.preventDefault(); 
         const file = items[i].getAsFile();
         if (!file) continue;
 
@@ -461,7 +424,7 @@ function AppMain() {
         } finally {
           setIsCompressing(false);
         }
-        break; // Ek baar me ek hi image process karo
+        break; 
       }
     }
   };
@@ -500,13 +463,13 @@ function AppMain() {
       const msgCount = parseInt(localStorage.getItem('aivox_guest_msg_count') || '0', 10);
       if (msgCount >= 5) {
         setShowSignupHookModal(true);
-        return; // Stops message from sending
+        return;
       }
       
       localStorage.setItem('aivox_guest_msg_count', (msgCount + 1).toString());
     }
 
-    const chatKeyAtStart = chatKeyRef.current; // 🗂️ ye message kis mode ki chat ka hai
+    const chatKeyAtStart = chatKeyRef.current; 
     const imagePart = selectedImageBase64; 
     let userBase64Image = null;
 
@@ -546,20 +509,23 @@ function AppMain() {
     const startTime = Date.now(); 
 
     try {
-      // 🔧 GitHub Models is retired (30 Jul 2026) -> skipped automatically while GITHUB_MODELS_ENABLED = false
+      // 🔧 GitHub Models is retired (30 Jul 2026)
       if (!GITHUB_MODELS_ENABLED) throw new Error("GitHub Models retired by GitHub on 30 Jul 2026 - skipped");
 
       const smartHistory = getRelevantHistory(textToProcess, messages);
       const formattedHistory = toOpenAIHistory(smartHistory);
       const userMessage = buildOpenAIVisionMessage(textToProcess, imagePart);
       
-      const githubApiKey = import.meta.env.VITE_GITHUB_TOKEN;
-      const ghResponse = await fetch("https://models.inference.ai.azure.com/chat/completions", {
-          method: "POST", headers: { "Authorization": `Bearer ${githubApiKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ model: "gpt-4o-mini", messages: [{ role: "system", content: systemPrompt }, ...formattedHistory, userMessage], max_tokens: 250, temperature: isActuallyRoasting ? 0.8 : 0.4 })
+      const ghResponse = await fetch(BACKEND_URL, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            provider: "github", 
+            endpoint: "https://models.inference.ai.azure.com/chat/completions",
+            payload: { body: { model: "gpt-4o-mini", messages: [{ role: "system", content: systemPrompt }, ...formattedHistory, userMessage], max_tokens: 250, temperature: isActuallyRoasting ? 0.8 : 0.4 } }
+          })
       });
-      if (!ghResponse.ok) throw new Error("GitHub API failed");
       const ghData = await ghResponse.json();
+      if (!ghResponse.ok) throw new Error(ghData.error || "GitHub API failed");
       finalResponse = extractReply(ghData);
       finalModel = imagePart ? "GPT-4o-mini Vision (GitHub)" : "GPT-4o-mini (GitHub)";
       
@@ -570,12 +536,16 @@ function AppMain() {
         const smartHistory = getRelevantHistory(textToProcess, messages);
         const formattedHistory = toOpenAIHistory(smartHistory);
         
-        const mistralResponse = await fetch("https://api.mistral.ai/v1/chat/completions", {
-            method: "POST", headers: { "Authorization": `Bearer ${mistralApiKey}`, "Content-Type": "application/json" },
-            body: JSON.stringify({ model: "mistral-small-latest", messages: [{ role: "system", content: systemPrompt }, ...formattedHistory, { role: "user", content: textToProcess }], max_tokens: 250, temperature: isActuallyRoasting ? 0.8 : 0.4 })
+        const mistralResponse = await fetch(BACKEND_URL, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ 
+              provider: "mistral", 
+              endpoint: "https://api.mistral.ai/v1/chat/completions",
+              payload: { body: { model: "mistral-small-latest", messages: [{ role: "system", content: systemPrompt }, ...formattedHistory, { role: "user", content: textToProcess }], max_tokens: 250, temperature: isActuallyRoasting ? 0.8 : 0.4 } }
+            })
         });
-        if (!mistralResponse.ok) throw new Error(`Mistral API failed (status ${mistralResponse.status})`);
         const mistralData = await mistralResponse.json();
+        if (!mistralResponse.ok) throw new Error(`Mistral API failed`);
         finalResponse = extractReply(mistralData);
         finalModel = "Mistral-Small";
 
@@ -586,51 +556,60 @@ function AppMain() {
           const formattedHistory = toOpenAIHistory(smartHistory);
           const userMessage = buildOpenAIVisionMessage(textToProcess, imagePart);
           
-          // 🔧 New Groq models. Both are "reasoning" models, so reasoning is kept minimal and a bigger token budget is used
-          // (reasoning tokens count towards the limit; 250 would cut the answer off / return empty).
           const groqModelConfig = imagePart
             ? { model: GROQ_VISION_MODEL, reasoning_effort: "none", max_completion_tokens: 400 }
             : { model: GROQ_TEXT_MODEL, reasoning_effort: "low", include_reasoning: false, max_completion_tokens: 1024 };
           
-          const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-            method: "POST", headers: { "Authorization": `Bearer ${groqApiKey}`, "Content-Type": "application/json" },
-            body: JSON.stringify({ ...groqModelConfig, messages: [{ role: "system", content: systemPrompt }, ...formattedHistory, userMessage], temperature: isActuallyRoasting ? 0.8 : 0.4 })
+          const groqResponse = await fetch(BACKEND_URL, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ 
+              provider: "groq", 
+              endpoint: "https://api.groq.com/openai/v1/chat/completions",
+              payload: { body: { ...groqModelConfig, messages: [{ role: "system", content: systemPrompt }, ...formattedHistory, userMessage], temperature: isActuallyRoasting ? 0.8 : 0.4 } }
+            })
           });
-          if (!groqResponse.ok) throw new Error(`Groq API Limit/Failed (status ${groqResponse.status})`);
           const groqData = await groqResponse.json();
+          if (!groqResponse.ok) throw new Error(`Groq API Limit/Failed`);
           finalResponse = extractReply(groqData);
           finalModel = imagePart ? "Qwen3.8-Vision (Groq)" : "GPT-OSS-20B (Groq)";
 
         } catch (groqError) {
           console.log("Groq failed, trying Gemini...", groqError.message);
           try {
-            const genAI = new GoogleGenerativeAI(geminiApiKey);
-
-            // 🔧 Gemini history must start with a 'user' message and alternate user/model
             const smartHistory = getRelevantHistory(textToProcess, messages);
             const { history: geminiHistory, carry: geminiCarry } = toGeminiHistory(smartHistory);
             const geminiOutgoingText = geminiCarry ? `${geminiCarry}\n${textToProcess}` : textToProcess;
             const messageParts = imagePart ? [geminiOutgoingText || "Explain this image.", imagePart] : [geminiOutgoingText];
 
-            // 🔧 Try the new Gemini models one by one (old gemini-1.5-flash is gone)
             let geminiLastError = null;
             for (const geminiModelName of GEMINI_MODELS) {
               try {
-                const model = genAI.getGenerativeModel({ 
-                  model: geminiModelName, 
-                  systemInstruction: systemPrompt, 
-                  generationConfig: { maxOutputTokens: 1024, temperature: isActuallyRoasting ? 0.8 : 0.4 },
-                  safetySettings: [
-                    { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                    { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-                    { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                    { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                  ]
+                const geminiResponse = await fetch(BACKEND_URL, {
+                  method: "POST", headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    provider: "gemini",
+                    payload: {
+                      modelConfig: { 
+                        model: geminiModelName, 
+                        systemInstruction: systemPrompt, 
+                        generationConfig: { maxOutputTokens: 1024, temperature: isActuallyRoasting ? 0.8 : 0.4 },
+                        safetySettings: [
+                          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+                          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+                          { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+                          { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+                        ]
+                      },
+                      history: geminiHistory,
+                      messageParts: messageParts
+                    }
+                  })
                 });
 
-                const chat = model.startChat({ history: geminiHistory });
-                const result = await chat.sendMessage(messageParts);
-                const geminiText = result.response.text();
+                const geminiData = await geminiResponse.json();
+                if (!geminiResponse.ok) throw new Error(geminiData.error || "Gemini backend error");
+
+                const geminiText = geminiData.text;
                 if (!geminiText || !geminiText.trim()) throw new Error("Empty Gemini response");
 
                 finalResponse = geminiText;
@@ -651,13 +630,16 @@ function AppMain() {
                 const formattedHistory = toOpenAIHistory(smartHistory);
                 const userMessage = buildOpenAIVisionMessage(textToProcess, imagePart);
                 
-                // 🔧 'openrouter/free' auto-selects a currently available free model (and one that supports images if needed)
-                const orResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-                    method: "POST", headers: { "Authorization": `Bearer ${openRouterApiKey}`, "Content-Type": "application/json", "HTTP-Referer": "https://aivoxpro.co.in", "X-Title": "Aivox Pro" },
-                    body: JSON.stringify({ model: OPENROUTER_MODEL, messages: [{ role: "system", content: systemPrompt }, ...formattedHistory, userMessage], max_tokens: 1000, temperature: isActuallyRoasting ? 0.8 : 0.4 })
+                const orResponse = await fetch(BACKEND_URL, {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ 
+                      provider: "openrouter",
+                      endpoint: "https://openrouter.ai/api/v1/chat/completions",
+                      payload: { body: { model: OPENROUTER_MODEL, messages: [{ role: "system", content: systemPrompt }, ...formattedHistory, userMessage], max_tokens: 1000, temperature: isActuallyRoasting ? 0.8 : 0.4 } }
+                    })
                 });
-                if (!orResponse.ok) throw new Error(`OpenRouter API limits reached (status ${orResponse.status})`);
                 const orData = await orResponse.json();
+                if (!orResponse.ok) throw new Error(`OpenRouter API limits reached`);
                 
                 if (orData.choices && orData.choices[0]) {
                   finalResponse = extractReply(orData);
