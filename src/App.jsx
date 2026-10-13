@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, Component } from 'react';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
 import ReactMarkdown from 'react-markdown';
 import { trackUserActivity, onPromptStart, onPromptKey } from './utils/tracker'; 
@@ -7,6 +7,37 @@ import { getRelevantHistory } from './utils/smartMemory';
 import { auth } from './firebase'; 
 import { onAuthStateChanged } from 'firebase/auth';
 import './App.css';
+
+// ===== SAFE STORAGE + BOOT HELPERS START =====
+// 🔧 Kuch browsers (cookies blocked / in-app browsers) mein localStorage ko chhuna hi error deta hai,
+// jis se poori app blank ho jati thi. Aisa ho toh memory-based storage laga dete hain taaki app chalta rahe.
+(() => {
+  try {
+    window.localStorage.getItem('__aivox_storage_check__');
+  } catch {
+    try {
+      const mem = {};
+      const memoryStorage = {
+        getItem: (k) => (Object.prototype.hasOwnProperty.call(mem, k) ? mem[k] : null),
+        setItem: (k, v) => { mem[k] = String(v); },
+        removeItem: (k) => { delete mem[k]; },
+        clear: () => { Object.keys(mem).forEach((k) => delete mem[k]); },
+      };
+      Object.defineProperty(window, 'localStorage', { value: memoryStorage, configurable: true });
+    } catch { /* kuch nahi kar sakte */ }
+  }
+})();
+
+// 🔧 "Waking up Aivox" animation sirf pehli baar (app start par) dikhegi.
+// Features / Profile se wapas aane par (page reload hone par bhi) dobara nahi aayegi.
+const BOOT_FLAG = 'aivox_booted_session';
+const hasBootedThisSession = () => {
+  try { return sessionStorage.getItem(BOOT_FLAG) === '1'; } catch { return false; }
+};
+const markAppBooted = () => {
+  try { sessionStorage.setItem(BOOT_FLAG, '1'); } catch { /* ignore */ }
+};
+// ===== SAFE STORAGE + BOOT HELPERS END =====
 
 // ===== AI HELPERS START (Oct 2026 fix) =====
 
@@ -130,17 +161,22 @@ const readSavedChat = (ego) => {
 
     if (!saved) return null;
     const parsed = JSON.parse(saved);
-    return Array.isArray(parsed) && parsed.length ? parsed : null;
+    if (!Array.isArray(parsed)) return null;
+    // Kharab / adhoori messages se app crash na ho (text hamesha string rahe)
+    const safe = parsed
+      .filter((m) => m && typeof m === 'object')
+      .map((m) => ({ ...m, text: typeof m.text === 'string' ? m.text : '' }));
+    return safe.length ? safe : null;
   } catch {
     return null;
   }
 };
 // ===== CHAT HISTORY HELPERS END =====
 
-function App() {
+function AppMain() {
   const [authUser, setAuthUser] = useState(null);
   const [guestName, setGuestName] = useState(localStorage.getItem('aivox_guest_name') || '');
-  const [isAuthChecking, setIsAuthChecking] = useState(true);
+  const [isAuthChecking, setIsAuthChecking] = useState(() => !hasBootedThisSession());
 
   const [prompt, setPrompt] = useState('');
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -223,20 +259,51 @@ function App() {
     };
     setIsMobile(mediaQuery.matches);
     setIsSidebarOpen(!mediaQuery.matches);
-    mediaQuery.addEventListener('change', handleMobileChange);
-    return () => mediaQuery.removeEventListener('change', handleMobileChange);
+    // Purane Safari / WebView mein addEventListener nahi hota (sirf addListener) -> pehle crash hota tha
+    if (mediaQuery.addEventListener) mediaQuery.addEventListener('change', handleMobileChange);
+    else if (mediaQuery.addListener) mediaQuery.addListener(handleMobileChange);
+    return () => {
+      if (mediaQuery.removeEventListener) mediaQuery.removeEventListener('change', handleMobileChange);
+      else if (mediaQuery.removeListener) mediaQuery.removeListener(handleMobileChange);
+    };
   }, []);
 
+  // 🔧 FIX: Firebase agar 3 sec mein jawab na de (slow net / blocked storage) toh
+  // "Waking up Aivox..." screen par hamesha ke liye atke nahi rahenge.
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      if (currentUser) {
-        setAuthUser(currentUser);
-      } else {
-        setAuthUser(null);
-      }
+    const finishAuthCheck = () => {
+      markAppBooted();            // ab is session mein start animation dobara nahi dikhegi
       setIsAuthChecking(false);
-    });
-    return unsubscribe;
+    };
+
+    const authTimeout = setTimeout(finishAuthCheck, 3000);
+    let unsubscribe = () => {};
+
+    try {
+      unsubscribe = onAuthStateChanged(
+        auth,
+        (currentUser) => {
+          clearTimeout(authTimeout);
+          setAuthUser(currentUser || null);
+          finishAuthCheck();
+        },
+        () => {
+          // Auth error aaye tab bhi app khul jaye
+          clearTimeout(authTimeout);
+          finishAuthCheck();
+        }
+      );
+    } catch (err) {
+      // Firebase init hi fail ho gaya toh bhi blank screen nahi, app guest mode mein khulega
+      console.error('Auth init failed', err);
+      clearTimeout(authTimeout);
+      finishAuthCheck();
+    }
+
+    return () => {
+      clearTimeout(authTimeout);
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -296,19 +363,17 @@ function App() {
   const scrollToBottom = () => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   const showToast = (msg) => { setToastMsg(msg); setTimeout(() => setToastMsg(''), 3000); };
 
-  const currentDisplayName = authUser ? authUser.displayName : (guestName || 'User');
+  // 🔧 displayName null ho sakta hai (email signup / Google profile bina naam ke) -> pehle .charAt() par crash = blank screen
+  const currentDisplayName = authUser
+    ? (authUser.displayName || (authUser.email ? authUser.email.split('@')[0] : '') || 'User')
+    : (guestName || 'User');
 
-  // 🔥 SMOOTH NAVIGATION HANDLER (UPDATED TO PREVENT STUCK UI) 🔥
-  const handleSmoothNavigate = (path, label) => {
+  // 🔧 FIX: Seedha navigate, koi fake delay / fake loader nahi.
+  // (Purana 1.5 sec ka setTimeout hata diya. Baaki jagah handleSmoothNavigate('/features', 'Features')
+  //  waise hi chalega, extra label argument ignore ho jata hai.)
+  const handleSmoothNavigate = (path) => {
     if (isMobile) setIsSidebarOpen(false);
-    setNavLoadingState({ isLoading: true, label });
-    setTimeout(() => {
-      window.location.href = path;
-      // Ek safety timer add kiya hai taaki agar route change ho, state apne aap normal ho jaye
-      setTimeout(() => {
-        setNavLoadingState({ isLoading: false, label: '' });
-      }, 500);
-    }, 1500); 
+    window.location.href = path;
   };
 
   const fileToGenerativePart = async (file) => {
@@ -760,7 +825,7 @@ function App() {
     showToast(`${egoDetails[ego].name} Activated! ❤️`);
   };
 
-  const filteredMessages = messages.filter(msg => msg.text.toLowerCase().includes(searchQuery.toLowerCase()));
+  const filteredMessages = messages.filter(msg => (msg.text || '').toLowerCase().includes(searchQuery.toLowerCase()));
   const themeClass = activeEgo === 'savage' ? 'roaster-active-theme' : (isLoveMode ? 'love-active-theme' : '');
 
   // 🔥 PREMIUM ANIMATED LOADER INSTALLED HERE 🔥
@@ -1351,6 +1416,46 @@ function App() {
         </div>
       </div>
     </div>
+  );
+}
+
+// 🛟 Safety net: kuch bhi crash ho toh blank/white screen ki jagah Reload wali screen dikhegi
+class AppErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error) {
+    console.error('Aivox crashed:', error);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '14px', background: '#0b0a14', color: '#fff', padding: '24px', textAlign: 'center' }}>
+          <img src="/logo.svg" alt="Aivox" style={{ width: '64px', height: '64px' }} />
+          <h2 style={{ margin: 0, fontSize: '22px' }}>Kuch gadbad ho gayi 😅</h2>
+          <p style={{ margin: 0, fontSize: '14px', color: '#a0a0b0' }}>Page dobara load karke dekho.</p>
+          <button
+            onClick={() => window.location.reload()}
+            style={{ padding: '12px 28px', borderRadius: '12px', border: 'none', background: 'linear-gradient(135deg, #8c82f2, #7063f4)', color: '#fff', fontWeight: '800', fontSize: '14px', cursor: 'pointer' }}
+          >
+            Reload
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function App() {
+  return (
+    <AppErrorBoundary>
+      <AppMain />
+    </AppErrorBoundary>
   );
 }
 
