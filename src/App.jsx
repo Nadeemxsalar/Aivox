@@ -59,8 +59,8 @@ const OPENROUTER_MODEL = 'openrouter/free';
 const PROVIDER_ORDER = {
   github: 0,       // band (GitHub Models retire ho chuka hai)
   mistral: 4,
-  groq: 2,
-  gemini: 1,
+  groq: 1,
+  gemini: 2,
   openrouter: 3,
 };
 
