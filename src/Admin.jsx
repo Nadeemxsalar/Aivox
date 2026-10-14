@@ -679,10 +679,109 @@ const ChatPair = memo(function ChatPair({ log, showSentAs, onImageClick, onOpenM
   );
 });
 
+// ═══════════════════════════════════════════════════════════
+// 🆕 NEW: LAZY LOADING — har section sirf apna data fetch karta hai
+// Datasets: logs = aivox_tracking | users = users | unsent = aivox_unsent_prompts
+// Ek baar fetch hone ke baad data cache rehta hai (tab badalne par dobara fetch nahi hota).
+// ═══════════════════════════════════════════════════════════
+const FETCHERS = {
+  logs: async () => {
+    const q = query(collection(db, "aivox_tracking"), orderBy("timestamp", "desc"));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  },
+  users: async () => {
+    const snap = await getDocs(collection(db, "users"));
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  },
+  unsent: async () => {
+    const q = query(collection(db, "aivox_unsent_prompts"), orderBy("timestamp", "desc"));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  },
+};
+
+// Kis tab ko kaun sa data chahiye (yahi se decide hota hai kya fetch hoga)
+const TAB_DATA = {
+  overview: ['logs'],
+  chats: ['logs'],
+  search: ['logs'],
+  features: ['logs', 'unsent'],
+  usermanagement: ['users'],      // + logs sirf tab, jab kisi user ki join/last-login date na ho (fallback)
+  fingerprint: ['logs'],
+  depth: ['logs'],
+  heatmap: ['logs'],
+  performance: ['logs'],
+  quality: ['logs'],
+  errors: ['logs'],
+  prompts: ['logs', 'unsent'],
+  wordcloud: ['logs'],
+  devices: ['logs'],
+  hardware: ['logs'],
+  geography: ['logs'],
+  network: ['logs'],
+  roaster: ['logs'],
+  economics: ['logs'],
+  report: ['logs'],
+  system: ['logs'],
+};
+
+const TAB_LABELS = {
+  overview: 'Overview', chats: 'User Chats', search: 'Live Search', features: 'God-Mode Stats',
+  usermanagement: 'User Accounts', fingerprint: 'Fingerprints', depth: 'Conversation Depth', heatmap: 'Hour Heatmap',
+  performance: 'AI Performance', quality: 'Quality Meter', errors: 'Error Monitor', prompts: 'Prompt Intel', wordcloud: 'Word Cloud',
+  devices: 'Devices', hardware: 'HW Leaderboard', geography: 'Geo & Locale', network: 'Network',
+  roaster: 'Roaster', economics: 'Token Economics', report: 'Analytics Report', system: 'System Logs',
+};
+
+const datasetsForTab = (tab, users) => {
+  const base = TAB_DATA[tab] || [];
+  if (tab === 'usermanagement' && (users || []).some(u => !getJoinedValue(u) || !getLastLoginValue(u))) {
+    return [...base, 'logs'];
+  }
+  return base;
+};
+
+// Section load / error state (shell + sidebar hamesha dikhta rehta hai, sirf content area mein ye aata hai)
+function SectionState({ label, error, onRetry, padLeft }) {
+  return (
+    <div style={padLeft}>
+      <style>{`
+        @keyframes secSpin { to { transform: rotate(360deg); } }
+        @keyframes secBar { 0% { transform: translateX(-100%); } 100% { transform: translateX(320%); } }
+        @media (prefers-reduced-motion: reduce) { .sec-motion { animation: none !important; } }
+      `}</style>
+      <div style={{ minHeight: '60vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, textAlign: 'center', padding: '40px 20px' }}>
+        {error ? (
+          <>
+            <div style={{ width: 54, height: 54, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ff6b6d', background: 'rgba(255,77,79,0.12)', border: '1px solid rgba(255,77,79,0.35)' }}>
+              <Icon name="alert" size={24} />
+            </div>
+            <div style={{ color: '#fff', fontWeight: 800, fontSize: 17 }}>{label} load nahi ho paya</div>
+            <div style={{ color: '#8a8d9e', fontSize: 13, maxWidth: 320, lineHeight: 1.5 }}>Network ya permission ka issue ho sakta hai. Dobara try karo.</div>
+            <button type="button" onClick={onRetry}
+              style={{ marginTop: 6, padding: '11px 24px', borderRadius: 12, border: 'none', background: '#8c82f2', color: '#fff', fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>
+              🔄 Retry
+            </button>
+          </>
+        ) : (
+          <>
+            <div className="sec-motion" style={{ width: 44, height: 44, borderRadius: '50%', border: '3px solid rgba(140,130,242,0.2)', borderTopColor: '#8c82f2', borderRightColor: '#00e5ff', animation: 'secSpin 0.8s linear infinite' }} />
+            <div style={{ color: '#e6e6fa', fontWeight: 700, fontSize: 15 }}>Loading {label}…</div>
+            <div style={{ width: 180, height: 4, borderRadius: 4, background: 'rgba(255,255,255,0.07)', overflow: 'hidden' }}>
+              <div className="sec-motion" style={{ width: '35%', height: '100%', borderRadius: 4, background: 'linear-gradient(90deg, #8c82f2, #00e5ff)', animation: 'secBar 1s ease-in-out infinite' }} />
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── MAIN COMPONENT ───
 function Admin() {
   const [logs, setLogs] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); // ab sirf pehli baar ka boot loader (baad mein har section ka apna loader)
   const [authLoading, setAuthLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const allowedEmails = ['nadeemxsalar@gmail.com', 'realheronadeem@gmail.com'];
@@ -710,6 +809,16 @@ function Admin() {
   const uiRef = useRef(null);
   const ignorePopRef = useRef(false);
 
+  // 🆕 LAZY LOADING STATE (har dataset ka status: idle / loading / loaded / error)
+  const [dataStatus, setDataStatus] = useState({ logs: 'idle', users: 'idle', unsent: 'idle' });
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const loadedRef = useRef({ logs: false, users: false, unsent: false });
+  const inflightRef = useRef({ logs: false, users: false, unsent: false });
+  const activeTabRef = useRef('overview');
+  const usersRef = useRef([]);
+  activeTabRef.current = activeTab;
+  usersRef.current = registeredUsers;
+
   // Responsive Hook
   useEffect(() => {
     const handleResize = () => setIsDesktop(window.innerWidth > 900);
@@ -731,33 +840,49 @@ function Admin() {
     return unsubscribe;
   }, []);
 
-  const fetchData = useCallback(async () => {
+  // 🆕 Ek dataset fetch karo (sirf tab jab pehle load na hua ho; force = refresh)
+  // Refresh ke time purana data screen par rehta hai, naya aate hi update ho jata hai (loader nahi aata)
+  const loadDataset = useCallback(async (name, force = false) => {
     if (!isAdmin) return;
+    if (inflightRef.current[name]) return;
+    if (!force && loadedRef.current[name]) return;
+
+    inflightRef.current[name] = true;
+    if (!loadedRef.current[name]) setDataStatus(prev => ({ ...prev, [name]: 'loading' }));
+
     try {
-      const q = query(collection(db, "aivox_tracking"), orderBy("timestamp", "desc"));
-      const snap = await getDocs(q);
-      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setLogs(data);
-
-      try {
-        const uSnap = await getDocs(collection(db, "users"));
-        setRegisteredUsers(uSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      } catch (err) { console.warn("Users fetch error:", err); }
-
-      try {
-        const unsentQ = query(collection(db, "aivox_unsent_prompts"), orderBy("timestamp", "desc"));
-        const unsentSnap = await getDocs(unsentQ);
-        setUnsentPrompts(unsentSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      } catch (err) { console.warn("Unsent prompts fetch error:", err); }
-
+      const data = await FETCHERS[name]();
+      if (name === 'logs') setLogs(data);
+      else if (name === 'users') setRegisteredUsers(data);
+      else if (name === 'unsent') setUnsentPrompts(data);
+      loadedRef.current[name] = true;
+      setDataStatus(prev => ({ ...prev, [name]: 'loaded' }));
     } catch (error) {
-      console.error("Error fetching data:", error);
+      console.error(`Error fetching ${name}:`, error);
+      if (!loadedRef.current[name]) setDataStatus(prev => ({ ...prev, [name]: 'error' }));
+      else uiRef.current?.toast('Refresh nahi ho paya, dobara try karo', 'error');
     } finally {
+      inflightRef.current[name] = false;
       setLoading(false);
     }
   }, [isAdmin]);
 
-  useEffect(() => { if (isAdmin) fetchData(); }, [fetchData, isAdmin]);
+  // 🆕 Refresh / Auto refresh: sirf us tab ka data dobara aata hai jo abhi khula hai
+  const fetchData = useCallback(async () => {
+    if (!isAdmin) return;
+    setIsRefreshing(true);
+    try {
+      await Promise.all(datasetsForTab(activeTabRef.current, usersRef.current).map(name => loadDataset(name, true)));
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [isAdmin, loadDataset]);
+
+  // 🆕 Tab khulte hi uska data fetch (pehle se load ho chuka ho toh kuch nahi hota)
+  useEffect(() => {
+    if (!isAdmin) return;
+    datasetsForTab(activeTab, registeredUsers).forEach(name => loadDataset(name));
+  }, [activeTab, isAdmin, registeredUsers, loadDataset]);
 
   useEffect(() => {
     if (autoRefresh && isAdmin) {
@@ -1196,6 +1321,14 @@ function Admin() {
 
   if (loading) return <LoadingScreen message="Loading Admin..." />;
 
+  // 🆕 Is tab ka data ready hai? (nahi hai toh content area mein loader / error + Retry aata hai)
+  const tabNeeds = TAB_DATA[activeTab] || [];
+  const tabPending = tabNeeds.some(n => dataStatus[n] !== 'loaded' && dataStatus[n] !== 'error');
+  const tabFailed = !tabPending && tabNeeds.some(n => dataStatus[n] === 'error');
+  const tabReady = !tabPending && !tabFailed;
+  const retryTab = () => { tabNeeds.filter(n => dataStatus[n] === 'error').forEach(n => loadDataset(n, true)); };
+  const logsReady = dataStatus.logs === 'loaded';
+
   // ─── NAV COMPONENTS ───
   const NavSection = ({ label, children }) => (
     <div>
@@ -1283,20 +1416,20 @@ function Admin() {
           </label>
         </div>
 
-        {/* Today's quick stats in sidebar */}
+        {/* Today's quick stats in sidebar (logs load hone ke baad numbers aate hain) */}
         <div style={{ margin:'0 16px 16px', background:'rgba(140,130,242,0.08)', borderRadius:10, padding:'10px 14px', border:'1px solid rgba(140,130,242,0.2)' }}>
           <div style={{ fontSize:10, color:'#8c82f2', fontWeight:700, textTransform:'uppercase', letterSpacing:1, marginBottom:8 }}>📅 Today</div>
           <div style={{ display:'flex', justifyContent:'space-between', fontSize:12 }}>
             <div style={{ textAlign:'center' }}>
-              <div style={{ color:'#fff', fontWeight:800, fontSize:16 }}>{todayRequests}</div>
+              <div style={{ color:'#fff', fontWeight:800, fontSize:16 }}>{logsReady ? todayRequests : '—'}</div>
               <div style={{ color:'#6a6b8c' }}>Requests</div>
             </div>
             <div style={{ textAlign:'center' }}>
-              <div style={{ color:'#f5b942', fontWeight:800, fontSize:16 }}>{(todayTokens/1000).toFixed(1)}K</div>
+              <div style={{ color:'#f5b942', fontWeight:800, fontSize:16 }}>{logsReady ? `${(todayTokens/1000).toFixed(1)}K` : '—'}</div>
               <div style={{ color:'#6a6b8c' }}>Tokens</div>
             </div>
             <div style={{ textAlign:'center' }}>
-              <div style={{ color:'#00ff80', fontWeight:800, fontSize:16 }}>${todayCost.toFixed(3)}</div>
+              <div style={{ color:'#00ff80', fontWeight:800, fontSize:16 }}>{logsReady ? `$${todayCost.toFixed(3)}` : '—'}</div>
               <div style={{ color:'#6a6b8c' }}>Cost</div>
             </div>
           </div>
@@ -1342,6 +1475,13 @@ function Admin() {
       {/* ─── MAIN CONTENT ─── */}
       <main className={styles.mainContent} style={{ overflowY:'auto', overflowX:'hidden', transition:'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)' }}>
 
+        {/* 🆕 LAZY LOAD: is section ka data aa raha hai ya fail hua — tab tak sirf ye dikhta hai */}
+        {!tabReady && (
+          <SectionState label={TAB_LABELS[activeTab] || 'Section'} error={tabFailed} onRetry={retryTab} padLeft={padLeft} />
+        )}
+
+        {tabReady && (<>
+
         {/* ══════════════════════════════════════════
             OVERVIEW
         ══════════════════════════════════════════ */}
@@ -1355,7 +1495,7 @@ function Admin() {
               <div className={styles.pageHeaderRight}>
                 <span className={styles.refreshCountdown}>{autoRefresh ? `🔄 ${countdown}s` : '⏸ Manual'}</span>
                 <div className={styles.liveBadge}><span className={styles.pulse}></span> LIVE</div>
-                <button onClick={fetchData} className={styles.actionBtn}>🔄 Refresh</button>
+                <button onClick={fetchData} disabled={isRefreshing} className={styles.actionBtn}>{isRefreshing ? '⏳ Refreshing…' : '🔄 Refresh'}</button>
               </div>
             </header>
 
@@ -2084,6 +2224,7 @@ function Admin() {
         {/* ══════════════════════════════════════════
             USER MANAGEMENT
             🆕 + JOINED / LAST ACTIVE (DATE & TIME), POPUP DELETE
+            🆕 LAZY: sirf users collection fetch hoti hai (chat logs sirf tab, jab kisi ki date missing ho)
         ══════════════════════════════════════════ */}
         {activeTab === 'usermanagement' && (
           <div className={styles.sectionFadeIn} style={{ display:'block', height:'auto', paddingBottom:'60px' }}>
@@ -2109,6 +2250,8 @@ function Admin() {
                     const act = userChatActivity[nameKey];
                     const joinedVal = getJoinedValue(user);
                     const lastVal = getLastLoginValue(user);
+                    // Fallback dates ke liye chat logs abhi aa rahe hain?
+                    const fallbackPending = dataStatus.logs !== 'loaded' && dataStatus.logs !== 'error';
                     return (
                       <tr key={user.id}>
                         <td><div className={styles.sysTag} style={{background:'#8c82f2',color:'#fff'}}>{user.name||user.displayName||'Unknown'}</div></td>
@@ -2119,8 +2262,16 @@ function Admin() {
                             : user.role==='admin' ? <span className={styles.sysTag} style={{background:'#f5b942',color:'#000'}}>Admin</span>
                             : <span className={styles.sysTag} style={{background:'#1a3a2a',color:'#00ff80'}}>User</span>}
                         </td>
-                        <td><DateTimeCell value={joinedVal || (act ? act.first : null)} note={!joinedVal && act ? 'first chat' : ''} /></td>
-                        <td><DateTimeCell value={lastVal || (act ? act.last : null)} note={!lastVal && act ? 'last chat' : ''} /></td>
+                        <td>
+                          {(!joinedVal && !act && fallbackPending)
+                            ? <span style={{ color:'#6a6b8c', fontSize:12 }}>Loading…</span>
+                            : <DateTimeCell value={joinedVal || (act ? act.first : null)} note={!joinedVal && act ? 'first chat' : ''} />}
+                        </td>
+                        <td>
+                          {(!lastVal && !act && fallbackPending)
+                            ? <span style={{ color:'#6a6b8c', fontSize:12 }}>Loading…</span>
+                            : <DateTimeCell value={lastVal || (act ? act.last : null)} note={!lastVal && act ? 'last chat' : ''} />}
+                        </td>
                         <td>
                           {!isMaster ? (
                             <div style={{display:'flex',gap:8}}>
@@ -2529,7 +2680,7 @@ function Admin() {
             <header className={styles.pageHeader}>
               <div style={padLeft}><h1>⚙️ System Logs</h1><p>Deep hardware, network aur battery data.</p></div>
               <div className={styles.pageHeaderRight}>
-                <button onClick={fetchData} className={styles.actionBtn}>🔄 Refresh</button>
+                <button onClick={fetchData} disabled={isRefreshing} className={styles.actionBtn}>{isRefreshing ? '⏳ Refreshing…' : '🔄 Refresh'}</button>
                 <button onClick={downloadCSV} className={`${styles.actionBtn} ${styles.actionBtnSuccess}`}>📥 CSV</button>
               </div>
             </header>
@@ -2589,6 +2740,7 @@ function Admin() {
           </div>
         )}
 
+        </>)}
       </main>
       {isMobileMenuOpen && <div className={styles.menuOverlay} onClick={() => setIsMobileMenuOpen(false)}></div>}
 
