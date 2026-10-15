@@ -1,6 +1,6 @@
-import { useEffect, useState, useRef, useCallback, memo, forwardRef, useImperativeHandle } from 'react';
+import { useEffect, useLayoutEffect, useState, useRef, useCallback, useMemo, memo, forwardRef, useImperativeHandle } from 'react';
 import { createPortal } from 'react-dom';
-import { collection, getDocs, query, orderBy, doc, deleteDoc, updateDoc, writeBatch } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, where, limit, startAfter, doc, deleteDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import ReactMarkdown from 'react-markdown';
@@ -136,7 +136,7 @@ function DailyChart({ data, valueKey, color = '#8c82f2', formatter = v => v }) {
     return () => ro.disconnect();
   }, [draw]);
 
-  if (!data.length) return <p style={{ color: '#555', textAlign: 'center', padding: '30px 0' }}>Koi data nahi abhi 📊</p>;
+  if (!data.length) return <p style={{ color: '#555', textAlign: 'center', padding: '30px 0' }}>Koi data nahi abhi</p>;
 
   return (
     <div ref={wrapperRef} style={{ position: 'relative', width: '100%', height: 170, overflow: 'hidden' }}>
@@ -290,14 +290,77 @@ const ICON_PATHS = {
   message:  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>,
   check:    <polyline points="20 6 9 17 4 12"/>,
   alert:    <><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></>,
+  // ── navigation / actions ──
+  refresh:      <><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></>,
+  arrowLeft:    <><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></>,
+  chevronDown:  <polyline points="6 9 12 15 18 9"/>,
+  chevronUp:    <polyline points="18 15 12 9 6 15"/>,
+  chevronsDown: <><polyline points="7 13 12 18 17 13"/><polyline points="7 6 12 11 17 6"/></>,
+  close:        <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>,
+  pause:        <><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></>,
+  download:     <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>,
+  printer:      <><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></>,
+  calendar:     <><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></>,
+  edit:         <><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></>,
+  lock:         <><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></>,
+  key:          <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>,
+  ban:          <><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></>,
+  // ── sections ──
+  overview:     <><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></>,
+  search:       <><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></>,
+  sparkles:     <><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/><path d="M19 17l.7 1.8 1.8.7-1.8.7L19 22l-.7-1.8-1.8-.7 1.8-.7L19 17z"/></>,
+  users:        <><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></>,
+  fingerprint:  <><path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4"/><path d="M14 13.12c0 2.38 0 6.38-1 8.88"/><path d="M17.29 21.02c.12-.6.43-2.3.5-3.02"/><path d="M2 12a10 10 0 0 1 18-6"/><path d="M2 16h.01"/><path d="M21.8 16c.2-2 .131-5.354 0-6"/><path d="M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2"/><path d="M8.65 22c.21-.66.45-1.32.57-2"/><path d="M9 6.8a6 6 0 0 1 9 5.2v2"/></>,
+  layers:       <><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></>,
+  grid:         <><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></>,
+  zap:          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>,
+  trendingUp:   <><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></>,
+  alertTriangle:<><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></>,
+  terminal:     <><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></>,
+  cloud:        <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>,
+  smartphone:   <><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></>,
+  monitor:      <><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></>,
+  cpu:          <><rect x="4" y="4" width="16" height="16" rx="2" ry="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></>,
+  globe:        <><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></>,
+  wifi:         <><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></>,
+  flame:        <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>,
+  dollar:       <><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></>,
+  fileText:     <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></>,
+  settings:     <><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></>,
+  eyeOff:       <><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></>,
+  image:        <><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></>,
+  heart:        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>,
+  mic:          <><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></>,
+  camera:       <><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></>,
+  battery:      <><rect x="1" y="6" width="18" height="12" rx="2" ry="2"/><line x1="23" y1="13" x2="23" y2="11"/></>,
+  award:        <><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></>,
+  checkCircle:  <><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></>,
+  xCircle:      <><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></>,
 };
 
-function Icon({ name, size = 18 }) {
+function Icon({ name, size = 18, spin = false }) {
   return (
-    <svg viewBox="0 0 24 24" width={size} height={size} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" aria-hidden="true">
+    <svg viewBox="0 0 24 24" width={size} height={size} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" aria-hidden="true"
+      style={spin ? { flexShrink: 0, animation: 'uiSpin 0.8s linear infinite' } : { flexShrink: 0 }}>
       {ICON_PATHS[name]}
     </svg>
   );
+}
+
+// Page title ke aage icon (h1 ke andar)
+function TitleIcon({ name, size = 26 }) {
+  return <span style={{ display: 'inline-flex', verticalAlign: '-4px', marginRight: 10, color: '#8c82f2' }}><Icon name={name} size={size} /></span>;
+}
+
+// Text ke beech chhota inline icon
+function InlineIcon({ name, size = 14, color, style }) {
+  return <span style={{ display: 'inline-flex', verticalAlign: '-2px', marginRight: 6, color, ...style }}><Icon name={name} size={size} /></span>;
+}
+
+// Device icon (OS ke hisaab se)
+function OsIcon({ os, size = 18 }) {
+  const t = os || '';
+  return <Icon name={(t.includes('Android') || t.includes('iOS')) ? 'smartphone' : 'monitor'} size={size} />;
 }
 
 function IconButton({ title, onClick, tone = 'default', children, size = 36 }) {
@@ -556,7 +619,7 @@ function MarkdownPre({ node, children, ...props }) {
 
 const markdownComponents = { pre: MarkdownPre };
 
-const ChatPair = memo(function ChatPair({ log, showSentAs, onImageClick, onOpenMenu }) {
+const ChatPair = memo(function ChatPair({ log, showSentAs, onImageClick, onOpenMenu, onMediaLoad }) {
   const timerRef = useRef(null);
   const startRef = useRef({ x: 0, y: 0 });
   const firedRef = useRef(false);
@@ -604,9 +667,9 @@ const ChatPair = memo(function ChatPair({ log, showSentAs, onImageClick, onOpenM
 
   let loveLabel = null;
   if (isLove) {
-    if (log.activeMode === 'lover_girl' || log.activeEgo === 'lover_girl') loveLabel = 'GF 🌸';
-    else if (log.activeMode === 'lover_boy' || log.activeEgo === 'lover_boy') loveLabel = 'BF 🦋';
-    else loveLabel = 'LOVE 💖';
+    if (log.activeMode === 'lover_girl' || log.activeEgo === 'lover_girl') loveLabel = 'GF';
+    else if (log.activeMode === 'lover_boy' || log.activeEgo === 'lover_boy') loveLabel = 'BF';
+    else loveLabel = 'LOVE';
   }
 
   return (
@@ -618,8 +681,8 @@ const ChatPair = memo(function ChatPair({ log, showSentAs, onImageClick, onOpenM
 
           {/* 🔥 ADMIN: SHOW WHICH NAME WAS USED FOR THIS SPECIFIC MESSAGE 🔥 */}
           {showSentAs && (
-            <div style={{ fontSize: '10px', color: '#f5b942', marginBottom: '6px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '4px', fontWeight: 'bold' }}>
-              📝 Sent as: {log.userName}
+            <div style={{ fontSize: '10px', color: '#f5b942', marginBottom: '6px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '4px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <Icon name="edit" size={11} /> Sent as: {log.userName}
             </div>
           )}
 
@@ -630,6 +693,7 @@ const ChatPair = memo(function ChatPair({ log, showSentAs, onImageClick, onOpenM
                 src={log.attachedImage}
                 alt="User Uploaded"
                 onClick={() => onImageClick(log.attachedImage)}
+                onLoad={onMediaLoad}
                 style={{
                   maxWidth: '100%',
                   maxHeight: '200px',
@@ -658,8 +722,8 @@ const ChatPair = memo(function ChatPair({ log, showSentAs, onImageClick, onOpenM
         <div className={`${styles.chatBubble} ${styles.bubbleAi} ${isRoast ? styles.bubbleRoast : ''} ${isLove ? styles.bubbleLove : ''}`}>
 
           {loveLabel && (
-            <div style={{ display: 'inline-block', fontSize: '10px', fontWeight: '900', color: '#ff1493', background: 'rgba(255, 20, 147, 0.15)', padding: '2px 7px', borderRadius: '5px', marginBottom: '6px', border: '1px solid rgba(255, 20, 147, 0.4)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              {loveLabel}
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '10px', fontWeight: '900', color: '#ff1493', background: 'rgba(255, 20, 147, 0.15)', padding: '2px 7px', borderRadius: '5px', marginBottom: '6px', border: '1px solid rgba(255, 20, 147, 0.4)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              <Icon name="heart" size={10} />{loveLabel}
             </div>
           )}
 
@@ -680,34 +744,48 @@ const ChatPair = memo(function ChatPair({ log, showSentAs, onImageClick, onOpenM
 });
 
 // ═══════════════════════════════════════════════════════════
-// 🆕 NEW: LAZY LOADING — har section sirf apna data fetch karta hai
-// Datasets: logs = aivox_tracking | users = users | unsent = aivox_unsent_prompts
+// 🆕 NEW: LAZY LOADING — har section sirf utna hi data laata hai jitni zarurat ho
+//   logs / chatlist / unsent = paged (pehle ek page, baaki scroll ya "Load more" par)
+//   users = chhoti collection, ek baar poori
 // Ek baar fetch hone ke baad data cache rehta hai (tab badalne par dobara fetch nahi hota).
 // ═══════════════════════════════════════════════════════════
-const FETCHERS = {
-  logs: async () => {
-    const q = query(collection(db, "aivox_tracking"), orderBy("timestamp", "desc"));
-    const snap = await getDocs(q);
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  },
-  users: async () => {
-    const snap = await getDocs(collection(db, "users"));
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  },
-  unsent: async () => {
-    const q = query(collection(db, "aivox_unsent_prompts"), orderBy("timestamp", "desc"));
-    const snap = await getDocs(q);
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  },
+const PAGE_SIZE = { logs: 500, chatlist: 300, unsent: 50 };
+const PAGED_COLLECTION = { logs: 'aivox_tracking', chatlist: 'aivox_tracking', unsent: 'aivox_unsent_prompts' };
+
+const fetchPage = async (name, cursor) => {
+  const size = PAGE_SIZE[name];
+  const col = collection(db, PAGED_COLLECTION[name]);
+  const q = cursor
+    ? query(col, orderBy("timestamp", "desc"), startAfter(cursor), limit(size))
+    : query(col, orderBy("timestamp", "desc"), limit(size));
+  const snap = await getDocs(q);
+  return {
+    items: snap.docs.map(d => ({ id: d.id, ...d.data() })),
+    lastDoc: snap.docs.length ? snap.docs[snap.docs.length - 1] : cursor,
+    hasMore: snap.docs.length === size,
+  };
+};
+
+const fetchUsers = async () => {
+  const snap = await getDocs(collection(db, "users"));
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+};
+
+const tsOf = (l) => { const t = new Date(l.timestamp).getTime(); return isNaN(t) ? 0 : t; };
+const appendUnique = (prev, items) => { const seen = new Set(prev.map(l => l.id)); return [...prev, ...items.filter(l => !seen.has(l.id))]; };
+const mergeSorted = (prev, items) => {
+  const map = new Map(prev.map(l => [l.id, l]));
+  items.forEach(l => map.set(l.id, l));
+  return Array.from(map.values()).sort((a, b) => tsOf(b) - tsOf(a));
 };
 
 // Kis tab ko kaun sa data chahiye (yahi se decide hota hai kya fetch hoga)
 const TAB_DATA = {
   overview: ['logs'],
-  chats: ['logs'],
+  chats: ['chatlist'],            // sirf user list ka pehla page; user ki poori chat click par alag se aati hai
   search: ['logs'],
   features: ['logs', 'unsent'],
-  usermanagement: ['users'],      // + logs sirf tab, jab kisi user ki join/last-login date na ho (fallback)
+  usermanagement: ['users'],      // + saare logs sirf tab, jab kisi user ki join/last-login date na ho (fallback)
   fingerprint: ['logs'],
   depth: ['logs'],
   heatmap: ['logs'],
@@ -734,13 +812,7 @@ const TAB_LABELS = {
   roaster: 'Roaster', economics: 'Token Economics', report: 'Analytics Report', system: 'System Logs',
 };
 
-const datasetsForTab = (tab, users) => {
-  const base = TAB_DATA[tab] || [];
-  if (tab === 'usermanagement' && (users || []).some(u => !getJoinedValue(u) || !getLastLoginValue(u))) {
-    return [...base, 'logs'];
-  }
-  return base;
-};
+const datasetsForTab = (tab) => TAB_DATA[tab] || [];
 
 // Section load / error state (shell + sidebar hamesha dikhta rehta hai, sirf content area mein ye aata hai)
 function SectionState({ label, error, onRetry, padLeft }) {
@@ -760,8 +832,8 @@ function SectionState({ label, error, onRetry, padLeft }) {
             <div style={{ color: '#fff', fontWeight: 800, fontSize: 17 }}>{label} load nahi ho paya</div>
             <div style={{ color: '#8a8d9e', fontSize: 13, maxWidth: 320, lineHeight: 1.5 }}>Network ya permission ka issue ho sakta hai. Dobara try karo.</div>
             <button type="button" onClick={onRetry}
-              style={{ marginTop: 6, padding: '11px 24px', borderRadius: 12, border: 'none', background: '#8c82f2', color: '#fff', fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>
-              🔄 Retry
+              style={{ marginTop: 6, padding: '11px 24px', borderRadius: 12, border: 'none', background: '#8c82f2', color: '#fff', fontWeight: 800, fontSize: 14, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              <Icon name="refresh" size={15} /> Retry
             </button>
           </>
         ) : (
@@ -778,9 +850,234 @@ function SectionState({ label, error, onRetry, padLeft }) {
   );
 }
 
+// ═══════════════════════════════════════════════════════════
+// 🆕 NEW: CHAT GROUPS builder (same alias-merge logic, ab function ke roop mein)
+// ═══════════════════════════════════════════════════════════
+const buildChatGroups = (logsArr) => logsArr.reduce((groups, log) => {
+  const fp = makeFingerprint(log);
+  const uName = log.userName || "Anonymous";
+  
+  let matchedGroupId = null;
+
+  for (const key in groups) {
+    if (groups[key].id === fp) {
+      const existingName = groups[key].userName.toLowerCase();
+      const currentName = uName.toLowerCase();
+      
+      // Base first names match check (e.g. "meena" matches "meena kumari")
+      const existingFirst = existingName.split(' ')[0];
+      const currentFirst = currentName.split(' ')[0];
+
+      // Merge ONLY if First Name is same OR it's an anonymous/guest fallback
+      // This ensures "Nadeem" and "Prachi" stay separate on the same device!
+      if (
+        existingFirst === currentFirst ||
+        existingName === "anonymous" || existingName === "user" || existingName.includes("guest") ||
+        currentName === "anonymous" || currentName === "user" || currentName.includes("guest")
+      ) {
+        matchedGroupId = key;
+        break;
+      }
+    }
+  }
+
+  const groupId = matchedGroupId || `${uName}_${fp}`;
+
+  if (!groups[groupId]) {
+    groups[groupId] = { 
+      id: fp,
+      gid: groupId, 
+      userName: uName, 
+      aliases: [uName], // Array to store name history!
+      device: log.device||"Unknown", 
+      os: log.os||"Unknown", 
+      browser: log.browserVendor||"Unknown", 
+      network: log.network||"WIFI", 
+      messages: [] 
+    };
+  } else {
+    // Add to aliases if this is a new name for this session
+    if (!groups[groupId].aliases.includes(uName)) {
+      groups[groupId].aliases.push(uName);
+    }
+    
+    // Upgrade Main Name: Always prefer the longer/real name (e.g., 'meena' -> 'meena kumari')
+    const currentGroupLen = groups[groupId].userName.length;
+    if (uName !== "Anonymous" && uName !== "User" && !uName.toLowerCase().includes("guest") && uName.length > currentGroupLen) {
+      groups[groupId].userName = uName;
+    }
+  }
+
+  groups[groupId].messages.push(log);
+  return groups;
+}, {});;
+
+// "Load more" button (chat list, vault, system logs)
+function LoadMoreButton({ onClick, loading, children }) {
+  return (
+    <div style={{ textAlign: 'center', padding: '16px 0 4px' }}>
+      <button type="button" onClick={onClick} disabled={loading}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, border: '1px solid rgba(140,130,242,0.45)', background: 'rgba(140,130,242,0.14)', color: '#e6e6fa', fontWeight: 700, fontSize: 13, cursor: loading ? 'wait' : 'pointer', opacity: loading ? 0.7 : 1 }}>
+        <Icon name={loading ? 'refresh' : 'chevronDown'} size={15} spin={loading} />
+        {loading ? 'Loading…' : children}
+      </button>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// 🆕 NEW: CHAT MESSAGES PANE
+//  - sabse nayi 30 messages pehle, upar scroll karne par purane messages thode-thode aate hain
+//  - niche ek arrow button: ek click mein smoothly latest message tak
+//  - scroll position purane messages load hone par apni jagah rehti hai
+// ═══════════════════════════════════════════════════════════
+const CHAT_WINDOW = 30;
+
+function ChatMessagesPane({ user, className, style, onImageClick, onOpenMenu, loadingFull, loadError, onRetry }) {
+  const scrollRef = useRef(null);
+  const stickRef = useRef(true);          // user bottom ke paas hai? (naya message aaye toh bottom par hi rahe)
+  const anchorRef = useRef(0);            // bottom se distance (purane messages prepend hone par position bachane ke liye)
+  const firstIdRef = useRef(null);
+  const pendingOlderRef = useRef(false);
+  const [visible, setVisible] = useState(CHAT_WINDOW);
+  const [showArrow, setShowArrow] = useState(false);
+
+  const total = user.messages.length;
+  const shown = Math.min(visible, total);
+  const hasOlder = shown < total;
+  // user.messages newest-first hai; screen par oldest -> newest dikhana hai
+  const slice = useMemo(() => user.messages.slice(0, shown).reverse(), [user.messages, shown]);
+
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const firstId = slice.length ? slice[0].id : null;
+    const prevFirstIdx = firstIdRef.current ? slice.findIndex(l => l.id === firstIdRef.current) : -1;
+    if (stickRef.current) {
+      el.scrollTop = el.scrollHeight;
+    } else if (prevFirstIdx > 0) {
+      // purane messages upar add hue — jahan padh rahe the wahin rakho
+      el.scrollTop = el.scrollHeight - anchorRef.current;
+    }
+    firstIdRef.current = firstId;
+    anchorRef.current = el.scrollHeight - el.scrollTop;
+    pendingOlderRef.current = false;
+  }, [slice]);
+
+  const handleScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+    stickRef.current = dist < 80;
+    anchorRef.current = el.scrollHeight - el.scrollTop;
+    const wantArrow = dist > 260;
+    setShowArrow(prev => (prev === wantArrow ? prev : wantArrow));
+    if (el.scrollTop < 80 && hasOlder && !pendingOlderRef.current) {
+      pendingOlderRef.current = true;
+      setVisible(v => v + CHAT_WINDOW);
+    }
+  };
+
+  const loadOlder = () => {
+    const el = scrollRef.current;
+    if (el) anchorRef.current = el.scrollHeight - el.scrollTop;
+    stickRef.current = false;
+    pendingOlderRef.current = true;
+    setVisible(v => v + CHAT_WINDOW);
+  };
+
+  const scrollToBottom = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    // images load hone se height badh sakti hai — ek baar aur check
+    setTimeout(() => {
+      const e = scrollRef.current;
+      if (e && e.scrollHeight - e.scrollTop - e.clientHeight > 4) e.scrollTo({ top: e.scrollHeight, behavior: 'smooth' });
+    }, 420);
+  };
+
+  const handleMediaLoad = useCallback(() => {
+    const el = scrollRef.current;
+    if (el && stickRef.current) el.scrollTop = el.scrollHeight;
+  }, []);
+
+  const chipStyle = { pointerEvents: 'auto', display: 'inline-flex', alignItems: 'center', gap: 8, height: 30, padding: '0 14px', borderRadius: 30, fontSize: 12, fontWeight: 700, background: '#151426', boxShadow: '0 6px 20px rgba(0,0,0,0.45)' };
+
+  return (
+    <div ref={scrollRef} className={className} style={style} onScroll={handleScroll}>
+      {(loadingFull || loadError) && (
+        <div style={{ position: 'sticky', top: 8, height: 0, zIndex: 6, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
+          {loadError ? (
+            <div style={{ ...chipStyle, color: '#ff8a8c', border: '1px solid rgba(255,77,79,0.4)' }}>
+              <Icon name="alert" size={14} />
+              <span>Poori chat load nahi hui</span>
+              <button type="button" onClick={onRetry}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'rgba(255,77,79,0.18)', border: 'none', borderRadius: 20, color: '#ffb3b5', fontWeight: 800, fontSize: 11, padding: '4px 10px', cursor: 'pointer' }}>
+                <Icon name="refresh" size={12} /> Retry
+              </button>
+            </div>
+          ) : (
+            <div style={{ ...chipStyle, color: '#cdd6f4', border: '1px solid rgba(140,130,242,0.45)' }}>
+              <Icon name="refresh" size={14} spin />
+              <span>Loading full chat…</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {hasOlder && (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0 12px' }}>
+          <button type="button" onClick={loadOlder}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 20, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', color: '#aab0c8', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+            <Icon name="chevronUp" size={14} /> Older messages ({total - shown} more)
+          </button>
+        </div>
+      )}
+
+      {slice.map(log => (
+        <ChatPair
+          key={log.id}
+          log={log}
+          showSentAs={!!(user.aliases && user.aliases.length > 1 && log.userName !== user.userName)}
+          onImageClick={onImageClick}
+          onOpenMenu={onOpenMenu}
+          onMediaLoad={handleMediaLoad}
+        />
+      ))}
+
+      {showArrow && (
+        <div style={{ position: 'sticky', bottom: 14, height: 0, zIndex: 6, pointerEvents: 'none' }}>
+          <button type="button" onClick={scrollToBottom} title="Latest message par jao" aria-label="Scroll to latest message"
+            className="ui-motion"
+            style={{ position: 'absolute', right: 14, bottom: 0, width: 42, height: 42, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', pointerEvents: 'auto', color: '#fff', border: '1px solid rgba(255,255,255,0.18)', background: 'linear-gradient(135deg, #8c82f2, #7063f4)', boxShadow: '0 8px 22px rgba(112,99,244,0.5)', animation: 'uiPop 0.18s ease' }}>
+            <Icon name="chevronsDown" size={20} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Analytics tabs: sirf latest events load hue hain — poora history ek click mein
+function LogsWindowPill({ count, hasMore, busy, onLoadAll }) {
+  if (!hasMore && !busy) return null;
+  return (
+    <div style={{ position: 'fixed', right: 16, bottom: 'calc(16px + env(safe-area-inset-bottom, 0px))', zIndex: 60, display: 'flex', alignItems: 'center', gap: 10, padding: '7px 7px 7px 14px', borderRadius: 30, background: '#151426', border: '1px solid rgba(140,130,242,0.4)', boxShadow: '0 10px 30px rgba(0,0,0,0.45)', fontSize: 12, color: '#aab0c8', maxWidth: 'calc(100vw - 32px)' }}>
+      <span>Latest <strong style={{ color: '#fff' }}>{count.toLocaleString()}</strong> events</span>
+      <button type="button" onClick={onLoadAll} disabled={busy}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 20, border: 'none', background: '#8c82f2', color: '#fff', fontWeight: 800, fontSize: 12, cursor: busy ? 'wait' : 'pointer', opacity: busy ? 0.8 : 1 }}>
+        <Icon name={busy ? 'refresh' : 'download'} size={13} spin={busy} />
+        {busy ? 'Loading…' : 'Load all'}
+      </button>
+    </div>
+  );
+}
+
 // ─── MAIN COMPONENT ───
 function Admin() {
-  const [logs, setLogs] = useState([]);
+  const [logs, setLogs] = useState([]);               // analytics logs (paged)
+  const [chatLogs, setChatLogs] = useState([]);       // chats tab: user list pages + khule hue users ki poori chat
   const [loading, setLoading] = useState(true); // ab sirf pehli baar ka boot loader (baad mein har section ka apna loader)
   const [authLoading, setAuthLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -790,7 +1087,7 @@ function Admin() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
   const [isDesktop, setIsDesktop] = useState(true);
-  const [selectedUser, setSelectedUser] = useState(null);
+  const [selectedGid, setSelectedGid] = useState(null);   // chats tab: kaun sa user khula hai
   const [isMobileChatView, setIsMobileChatView] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [chatSearchQuery, setChatSearchQuery] = useState('');
@@ -810,14 +1107,33 @@ function Admin() {
   const ignorePopRef = useRef(false);
 
   // 🆕 LAZY LOADING STATE (har dataset ka status: idle / loading / loaded / error)
-  const [dataStatus, setDataStatus] = useState({ logs: 'idle', users: 'idle', unsent: 'idle' });
+  const [dataStatus, setDataStatus] = useState({ logs: 'idle', chatlist: 'idle', users: 'idle', unsent: 'idle' });
+  const [pager, setPager] = useState({
+    logs: { hasMore: false, loadingMore: false },
+    chatlist: { hasMore: false, loadingMore: false },
+    unsent: { hasMore: false, loadingMore: false },
+  });
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const loadedRef = useRef({ logs: false, users: false, unsent: false });
-  const inflightRef = useRef({ logs: false, users: false, unsent: false });
+  const [allLogsBusy, setAllLogsBusy] = useState(false);   // "Load all" chal raha hai
+  const [openingFp, setOpeningFp] = useState(null);        // jis user ki poori chat abhi fetch ho rahi hai
+  const [chatOpenError, setChatOpenError] = useState(null);
+  const [systemVisible, setSystemVisible] = useState(50);  // System Logs tab: ek baar mein 50 rows
+  const loadedRef = useRef({ logs: false, chatlist: false, users: false, unsent: false });
+  const inflightRef = useRef({});
+  const moreInflightRef = useRef({});
+  const allLogsRef = useRef(null);
+  const pagerRef = useRef({
+    logs: { cursor: null, hasMore: false },
+    chatlist: { cursor: null, hasMore: false },
+    unsent: { cursor: null, hasMore: false },
+  });
+  const fetchedFpRef = useRef(new Set());                  // jin users ki poori chat fetch ho chuki hai
+  const chatInflightRef = useRef({});
   const activeTabRef = useRef('overview');
-  const usersRef = useRef([]);
+  const selectedGidRef = useRef(null);
+  const chatTabGroupsRef = useRef({});
   activeTabRef.current = activeTab;
-  usersRef.current = registeredUsers;
+  selectedGidRef.current = selectedGid;
 
   // Responsive Hook
   useEffect(() => {
@@ -840,49 +1156,155 @@ function Admin() {
     return unsubscribe;
   }, []);
 
-  // 🆕 Ek dataset fetch karo (sirf tab jab pehle load na hua ho; force = refresh)
+  // 🆕 Dataset load (pehli baar ya refresh). logs / chatlist / unsent = sirf pehla page, users = poori (chhoti) collection.
   // Refresh ke time purana data screen par rehta hai, naya aate hi update ho jata hai (loader nahi aata)
-  const loadDataset = useCallback(async (name, force = false) => {
-    if (!isAdmin) return;
-    if (inflightRef.current[name]) return;
-    if (!force && loadedRef.current[name]) return;
+  const loadDataset = useCallback((name, force = false) => {
+    if (!isAdmin) return Promise.resolve();
+    if (inflightRef.current[name]) return inflightRef.current[name];
+    if (!force && loadedRef.current[name]) return Promise.resolve();
 
-    inflightRef.current[name] = true;
-    if (!loadedRef.current[name]) setDataStatus(prev => ({ ...prev, [name]: 'loading' }));
-
-    try {
-      const data = await FETCHERS[name]();
-      if (name === 'logs') setLogs(data);
-      else if (name === 'users') setRegisteredUsers(data);
-      else if (name === 'unsent') setUnsentPrompts(data);
-      loadedRef.current[name] = true;
-      setDataStatus(prev => ({ ...prev, [name]: 'loaded' }));
-    } catch (error) {
-      console.error(`Error fetching ${name}:`, error);
-      if (!loadedRef.current[name]) setDataStatus(prev => ({ ...prev, [name]: 'error' }));
-      else uiRef.current?.toast('Refresh nahi ho paya, dobara try karo', 'error');
-    } finally {
-      inflightRef.current[name] = false;
-      setLoading(false);
-    }
+    const run = (async () => {
+      const wasLoaded = loadedRef.current[name];
+      if (!wasLoaded) setDataStatus(prev => ({ ...prev, [name]: 'loading' }));
+      try {
+        if (name === 'users') {
+          setRegisteredUsers(await fetchUsers());
+        } else {
+          const page = await fetchPage(name, null);
+          const setItems = name === 'logs' ? setLogs : name === 'chatlist' ? setChatLogs : setUnsentPrompts;
+          if (!wasLoaded) {
+            setItems(page.items);
+            pagerRef.current[name] = { cursor: page.lastDoc, hasMore: page.hasMore };
+            setPager(prev => ({ ...prev, [name]: { hasMore: page.hasMore, loadingMore: false } }));
+          } else if (name === 'chatlist') {
+            setItems(prev => mergeSorted(prev, page.items));
+          } else {
+            const ids = new Set(page.items.map(l => l.id));
+            setItems(prev => [...page.items, ...prev.filter(l => !ids.has(l.id))]);
+          }
+        }
+        loadedRef.current[name] = true;
+        setDataStatus(prev => ({ ...prev, [name]: 'loaded' }));
+      } catch (error) {
+        console.error(`Error fetching ${name}:`, error);
+        if (!loadedRef.current[name]) setDataStatus(prev => ({ ...prev, [name]: 'error' }));
+        else uiRef.current?.toast('Refresh nahi ho paya, dobara try karo', 'error');
+      } finally {
+        setLoading(false);
+      }
+    })();
+    inflightRef.current[name] = run.finally(() => { inflightRef.current[name] = null; });
+    return inflightRef.current[name];
   }, [isAdmin]);
+
+  // 🆕 Agla page (scroll / "Load more" par). Resolve hota hai: aur data bacha hai ya nahi
+  const loadMore = useCallback((name) => {
+    const pg = pagerRef.current[name];
+    if (!isAdmin || !pg || !pg.hasMore) return Promise.resolve(false);
+    if (moreInflightRef.current[name]) return moreInflightRef.current[name];
+
+    setPager(prev => ({ ...prev, [name]: { ...prev[name], loadingMore: true } }));
+    const run = (async () => {
+      try {
+        const page = await fetchPage(name, pg.cursor);
+        pagerRef.current[name] = { cursor: page.lastDoc, hasMore: page.hasMore };
+        const setItems = name === 'logs' ? setLogs : name === 'chatlist' ? setChatLogs : setUnsentPrompts;
+        setItems(prev => (name === 'chatlist' ? mergeSorted(prev, page.items) : appendUnique(prev, page.items)));
+        setPager(prev => ({ ...prev, [name]: { hasMore: page.hasMore, loadingMore: false } }));
+        return page.hasMore;
+      } catch (error) {
+        console.error(`Error loading more ${name}:`, error);
+        setPager(prev => ({ ...prev, [name]: { ...prev[name], loadingMore: false } }));
+        uiRef.current?.toast('Aur data load nahi ho paya', 'error');
+        return false;
+      }
+    })();
+    moreInflightRef.current[name] = run.finally(() => { moreInflightRef.current[name] = null; });
+    return moreInflightRef.current[name];
+  }, [isAdmin]);
+
+  // 🆕 Poora logs history (analytics tabs ka "Load all" button + User Accounts ka fallback)
+  const loadAllLogs = useCallback(() => {
+    if (!isAdmin) return Promise.resolve();
+    if (allLogsRef.current) return allLogsRef.current;
+    setAllLogsBusy(true);
+    const run = (async () => {
+      try {
+        await loadDataset('logs');
+        let more = pagerRef.current.logs.hasMore;
+        while (more) { more = await loadMore('logs'); }
+      } finally {
+        setAllLogsBusy(false);
+      }
+    })();
+    allLogsRef.current = run.finally(() => { allLogsRef.current = null; });
+    return allLogsRef.current;
+  }, [isAdmin, loadDataset, loadMore]);
+
+  // 🆕 Kisi user par click karte hi sirf usi ki poori chat fetch hoti hai (device fingerprint ke fields se query)
+  const ensureUserChat = useCallback((user, force = false) => {
+    if (!isAdmin || !user) return Promise.resolve();
+    const fp = user.id;
+    if (chatInflightRef.current[fp]) return chatInflightRef.current[fp];
+    if (!force && fetchedFpRef.current.has(fp)) return Promise.resolve();
+
+    const sample = user.messages[0] || {};
+    const conds = ['os', 'device', 'screenResolution', 'browserVendor']
+      .filter(f => sample[f])
+      .map(f => where(f, '==', sample[f]));
+    if (conds.length === 0) { fetchedFpRef.current.add(fp); return Promise.resolve(); }
+
+    setOpeningFp(fp);
+    setChatOpenError(prev => (prev && prev.fp === fp ? null : prev));
+    const run = (async () => {
+      try {
+        const snap = await getDocs(query(collection(db, "aivox_tracking"), ...conds));
+        const docs = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(l => makeFingerprint(l) === fp);
+        setChatLogs(prev => mergeSorted(prev, docs));
+        fetchedFpRef.current.add(fp);
+      } catch (error) {
+        console.error('Chat load failed:', error);
+        setChatOpenError({ fp, message: error?.message || 'Chat load nahi hui' });
+      } finally {
+        setOpeningFp(prev => (prev === fp ? null : prev));
+      }
+    })();
+    chatInflightRef.current[fp] = run.finally(() => { chatInflightRef.current[fp] = null; });
+    return chatInflightRef.current[fp];
+  }, [isAdmin]);
+
+  // 🆕 Delete ke baad dono stores (analytics + chats) se logs hata do
+  const removeLogIds = useCallback((idsSet) => {
+    setLogs(prev => prev.filter(l => !idsSet.has(l.id)));
+    setChatLogs(prev => prev.filter(l => !idsSet.has(l.id)));
+  }, []);
 
   // 🆕 Refresh / Auto refresh: sirf us tab ka data dobara aata hai jo abhi khula hai
   const fetchData = useCallback(async () => {
     if (!isAdmin) return;
     setIsRefreshing(true);
     try {
-      await Promise.all(datasetsForTab(activeTabRef.current, usersRef.current).map(name => loadDataset(name, true)));
+      const tab = activeTabRef.current;
+      const jobs = datasetsForTab(tab).map(name => loadDataset(name, true));
+      const sel = selectedGidRef.current ? chatTabGroupsRef.current[selectedGidRef.current] : null;
+      if (tab === 'chats' && sel) jobs.push(ensureUserChat(sel, true));
+      await Promise.all(jobs);
     } finally {
       setIsRefreshing(false);
     }
-  }, [isAdmin, loadDataset]);
+  }, [isAdmin, loadDataset, ensureUserChat]);
 
   // 🆕 Tab khulte hi uska data fetch (pehle se load ho chuka ho toh kuch nahi hota)
   useEffect(() => {
     if (!isAdmin) return;
-    datasetsForTab(activeTab, registeredUsers).forEach(name => loadDataset(name));
-  }, [activeTab, isAdmin, registeredUsers, loadDataset]);
+    datasetsForTab(activeTab).forEach(name => loadDataset(name));
+  }, [activeTab, isAdmin, loadDataset]);
+
+  // 🆕 User Accounts: kisi ki join/last-login date missing ho toh hi chat history (fallback) laao
+  useEffect(() => {
+    if (activeTab !== 'usermanagement' || dataStatus.users !== 'loaded') return;
+    if (registeredUsers.some(u => !getJoinedValue(u) || !getLastLoginValue(u))) loadAllLogs();
+  }, [activeTab, dataStatus.users, registeredUsers, loadAllLogs]);
 
   useEffect(() => {
     if (autoRefresh && isAdmin) {
@@ -899,6 +1321,23 @@ function Admin() {
     }
     return () => clearInterval(countdownRef.current);
   }, [autoRefresh, fetchData, isAdmin]);
+
+  // 🆕 Groups: analytics (logs) aur chats tab (chatLogs) ke alag-alag. Chats ke groups sirf chats tab par bante hain.
+  const chatGroups = useMemo(() => buildChatGroups(logs), [logs]);
+  const chatTabGroups = useMemo(() => (activeTab === 'chats' ? buildChatGroups(chatLogs) : {}), [chatLogs, activeTab]);
+  chatTabGroupsRef.current = chatTabGroups;
+  const chatTabUserList = useMemo(
+    () => Object.values(chatTabGroups).sort((a, b) => new Date(b.messages[0].timestamp) - new Date(a.messages[0].timestamp)),
+    [chatTabGroups]
+  );
+  const selectedUser = selectedGid ? (chatTabGroups[selectedGid] || null) : null;
+
+  // 🆕 User select hote hi (ya desktop par auto-select) uski poori chat fetch
+  useEffect(() => {
+    if (activeTab !== 'chats' || !selectedGid) return;
+    const u = chatTabGroupsRef.current[selectedGid];
+    if (u) ensureUserChat(u);
+  }, [activeTab, selectedGid, ensureUserChat]);
 
   // ═══════════════════════════════════════════
   // 🆕 CHAT FULL SCREEN — effects
@@ -946,20 +1385,15 @@ function Admin() {
     uiRef.current?.confirm({
       title: 'Delete this message?',
       message: 'Ye prompt aur uska AI reply database se permanently delete ho jayega. Undo nahi hoga.',
-      details: [(log.prompt || (log.attachedImage ? '📸 Image message' : 'Empty message')).slice(0, 140)],
+      details: [(log.prompt || (log.attachedImage ? 'Image message' : 'Empty message')).slice(0, 140)],
       confirmText: 'Delete Message',
       successMsg: 'Message deleted',
       onConfirm: async () => {
         await deleteDoc(doc(db, "aivox_tracking", log.id));
-        setLogs(prev => prev.filter(l => l.id !== log.id));
-        setSelectedUser(prev => {
-          if (!prev) return prev;
-          const msgs = prev.messages.filter(m => m.id !== log.id);
-          return msgs.length ? { ...prev, messages: msgs } : null;
-        });
+        removeLogIds(new Set([log.id]));
       },
     });
-  }, []);
+  }, [removeLogIds]);
 
   const openMessageMenu = useCallback((log) => {
     const ui = uiRef.current;
@@ -981,7 +1415,7 @@ function Admin() {
     ui.sheet({
       title: 'Message options',
       meta: `${log.userName || 'Anonymous'} • ${new Date(log.timestamp).toLocaleString()}`,
-      preview: log.prompt || (log.attachedImage ? '📸 Image message' : 'Empty message'),
+      preview: log.prompt || (log.attachedImage ? 'Image message' : 'Empty message'),
       actions,
     });
   }, [requestDeleteMessage]);
@@ -1022,7 +1456,7 @@ function Admin() {
     uiRef.current?.confirm({
       title: 'Delete user account?',
       message: 'Ye account record users collection se permanently hat jayega. Undo nahi hoga.',
-      details: [`👤 ${userName}`, `🆔 ${userId}`],
+      details: [`Name: ${userName}`, `ID: ${userId}`],
       confirmText: 'Delete User',
       successMsg: `${userName} deleted`,
       onConfirm: async () => {
@@ -1061,69 +1495,12 @@ function Admin() {
   const maxHourly = Math.max(...hourlyData, 1);
   const peakHour = hourlyData.indexOf(Math.max(...hourlyData));
 
-  // 🔥 THE FIX: SMART ALIAS MERGE LOGIC (KEEPS CHAT TOGETHER + SHOWS BOTH NAMES) 🔥
-  const chatGroups = logs.reduce((groups, log) => {
-    const fp = makeFingerprint(log);
-    const uName = log.userName || "Anonymous";
-    
-    let matchedGroupId = null;
-
-    for (const key in groups) {
-      if (groups[key].id === fp) {
-        const existingName = groups[key].userName.toLowerCase();
-        const currentName = uName.toLowerCase();
-        
-        // Base first names match check (e.g. "meena" matches "meena kumari")
-        const existingFirst = existingName.split(' ')[0];
-        const currentFirst = currentName.split(' ')[0];
-
-        // Merge ONLY if First Name is same OR it's an anonymous/guest fallback
-        // This ensures "Nadeem" and "Prachi" stay separate on the same device!
-        if (
-          existingFirst === currentFirst ||
-          existingName === "anonymous" || existingName === "user" || existingName.includes("guest") ||
-          currentName === "anonymous" || currentName === "user" || currentName.includes("guest")
-        ) {
-          matchedGroupId = key;
-          break;
-        }
-      }
-    }
-
-    const groupId = matchedGroupId || `${uName}_${fp}`;
-
-    if (!groups[groupId]) {
-      groups[groupId] = { 
-        id: fp, 
-        userName: uName, 
-        aliases: [uName], // ⬅️ Array to store name history!
-        device: log.device||"Unknown", 
-        os: log.os||"Unknown", 
-        browser: log.browserVendor||"Unknown", 
-        network: log.network||"WIFI", 
-        messages: [] 
-      };
-    } else {
-      // Add to aliases if this is a new name for this session
-      if (!groups[groupId].aliases.includes(uName)) {
-        groups[groupId].aliases.push(uName);
-      }
-      
-      // Upgrade Main Name: Always prefer the longer/real name (e.g., 'meena' -> 'meena kumari')
-      const currentGroupLen = groups[groupId].userName.length;
-      if (uName !== "Anonymous" && uName !== "User" && !uName.toLowerCase().includes("guest") && uName.length > currentGroupLen) {
-        groups[groupId].userName = uName;
-      }
-    }
-
-    groups[groupId].messages.push(log);
-    return groups;
-  }, {});
+  // 🔥 SMART ALIAS MERGE LOGIC: ab buildChatGroups() mein hai (chatGroups upar useMemo se banta hai)
 
   const userList = Object.values(chatGroups).sort((a, b) => new Date(b.messages[0].timestamp) - new Date(a.messages[0].timestamp));
   const uniqueUsers = userList.length;
 
-  const filteredChatUsers = userList.filter(u =>
+  const filteredChatUsers = chatTabUserList.filter(u =>
     u.userName.toLowerCase().includes(chatSearchQuery.toLowerCase()) ||
     (u.aliases && u.aliases.some(alias => alias.toLowerCase().includes(chatSearchQuery.toLowerCase()))) ||
     u.device.toLowerCase().includes(chatSearchQuery.toLowerCase())
@@ -1136,15 +1513,19 @@ function Admin() {
   // 🆕 DELETE ENTIRE CHAT (popup + loader) — opened chat ke saare messages Firestore se delete
   const requestDeleteChat = (user) => {
     if (!user) return;
-    const snapIds = new Set(user.messages.map(m => m.id));
-    // Snapshot purana ho sakta hai — latest group se bhi ids le lo taaki koi message reh na jaye
-    const liveGroup = userList.find(u => u.messages.some(m => snapIds.has(m.id)));
-    const ids = Array.from(new Set([...snapIds, ...(liveGroup ? liveGroup.messages.map(m => m.id) : [])]));
+    // Poori chat load ho chuki ho tabhi delete (warna kuch messages reh jate)
+    const complete = fetchedFpRef.current.has(user.id) || !pager.chatlist.hasMore;
+    if (!complete) {
+      ensureUserChat(user, true);
+      uiRef.current?.toast('Poori chat load ho rahi hai, thodi der baad dobara try karo', 'error');
+      return;
+    }
+    const ids = user.messages.map(m => m.id);
 
     uiRef.current?.confirm({
       title: 'Delete entire chat?',
       message: 'Is user ki poori chat database se permanently delete ho jayegi (analytics se bhi hat jayegi). Undo nahi hoga.',
-      details: [`👤 ${user.userName}`, `📱 ${user.device} • ${user.os}`, `💬 ${ids.length} messages`],
+      details: [`Name: ${user.userName}`, `Device: ${user.device} • ${user.os}`, `Messages: ${ids.length}`],
       confirmText: 'Delete Chat',
       successMsg: `${user.userName}'s chat deleted`,
       onConfirm: async () => {
@@ -1153,10 +1534,9 @@ function Admin() {
           const batch = writeBatch(db);
           chunk.forEach(id => batch.delete(doc(db, "aivox_tracking", id)));
           await batch.commit();
-          const gone = new Set(chunk);
-          setLogs(prev => prev.filter(l => !gone.has(l.id)));
+          removeLogIds(new Set(chunk));
         }
-        setSelectedUser(null);
+        setSelectedGid(null);
         setIsChatFullscreen(false);
         setIsMobileChatView(false);
       },
@@ -1294,8 +1674,8 @@ function Admin() {
   }
 
   useEffect(() => {
-    if (filteredChatUsers.length > 0 && !selectedUser && window.innerWidth > 900) setSelectedUser(filteredChatUsers[0]);
-  }, [filteredChatUsers, selectedUser]);
+    if (activeTab === 'chats' && filteredChatUsers.length > 0 && !selectedUser && window.innerWidth > 900) setSelectedGid(filteredChatUsers[0].gid);
+  }, [activeTab, filteredChatUsers, selectedUser]);
 
   const handleTabChange = (tab) => {
     setActiveTab(tab); setIsMobileMenuOpen(false); setIsMobileChatView(false);
@@ -1307,14 +1687,14 @@ function Admin() {
   
   if (!isAdmin) return (
     <div className={styles.adminLoading} style={{ background:'#0b0a14', flexDirection:'column' }}>
-      <div style={{ fontSize:'70px', marginBottom:'10px' }}>🚫</div>
+      <div style={{ marginBottom:'14px', color:'#ff4d4f' }}><Icon name="ban" size={64} /></div>
       <h2 style={{ color:'#ff4d4f', margin:0 }}>Access Denied</h2>
       <p style={{ color:'#888', maxWidth:'350px', textAlign:'center', marginTop:'15px', lineHeight:'1.5', fontSize:'14px' }}>
         Only authorized admins can access the Control Center.
       </p>
       <button onClick={() => window.location.href = '/auth'}
         style={{ marginTop:'30px', padding:'14px 28px', background:'#8c82f2', border:'none', borderRadius:'12px', color:'#fff', cursor:'pointer', fontWeight:'bold', fontSize:'15px' }}>
-        Go to Login 🔑
+        <span style={{ display:'inline-flex', alignItems:'center', gap:8 }}>Go to Login <Icon name="key" size={16} /></span>
       </button>
     </div>
   );
@@ -1337,25 +1717,35 @@ function Admin() {
     </div>
   );
 
-  const NavBtn = ({ tab, children }) => (
+  const NavBtn = ({ tab, icon, children }) => (
     <button className={`${styles.navItem} ${activeTab === tab ? styles.activeNav : ''}`}
-      onClick={() => handleTabChange(tab)}>{children}</button>
+      onClick={() => handleTabChange(tab)}>
+      <span style={{ display:'inline-flex', alignItems:'center', gap:10 }}><Icon name={icon} size={17} />{children}</span>
+    </button>
   );
 
   const padLeft = { paddingLeft: (isDesktop && !isSidebarVisible) ? '40px' : '0', transition: '0.3s' };
 
-  // 🆕 Chat messages list (normal view + full screen dono ke liye same list)
-  const chatMessagesList = (activeTab === 'chats' && selectedUser)
-    ? selectedUser.messages.slice().reverse().map(log => (
-        <ChatPair
-          key={log.id}
-          log={log}
-          showSentAs={!!(selectedUser.aliases && selectedUser.aliases.length > 1 && log.userName !== selectedUser.userName)}
-          onImageClick={setFullScreenImage}
-          onOpenMenu={openMessageMenu}
-        />
-      ))
-    : null;
+  // 🆕 Chat messages (normal view + full screen dono ke liye same pane) — scroll par thoda-thoda load hota hai
+  const chatPane = (paneStyle) => (selectedUser ? (
+    <ChatMessagesPane
+      key={selectedUser.gid}
+      user={selectedUser}
+      className={styles.chatMessagesArea}
+      style={paneStyle}
+      onImageClick={setFullScreenImage}
+      onOpenMenu={openMessageMenu}
+      loadingFull={openingFp === selectedUser.id}
+      loadError={chatOpenError && chatOpenError.fp === selectedUser.id ? chatOpenError.message : null}
+      onRetry={() => ensureUserChat(selectedUser, true)}
+    />
+  ) : null);
+
+  // 🆕 User list ke neeche tak scroll karte hi agle users (purane logs ka agla page) aate hain
+  const handleUserListScroll = (e) => {
+    const el = e.currentTarget;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 240 && pager.chatlist.hasMore && !pager.chatlist.loadingMore) loadMore('chatlist');
+  };
 
   // ─── RENDER ───
   return (
@@ -1376,7 +1766,7 @@ function Admin() {
 
       {/* Mobile Header */}
       <div className={styles.mobileHeader}>
-        <h2>🚀 Aivox Admin</h2>
+        <h2><InlineIcon name="layers" size={20} color="#8c82f2" style={{ verticalAlign:'-3px' }} />Aivox Admin</h2>
         <button className={styles.hamburgerBtn} onClick={() => setIsMobileMenuOpen(true)}>
           <svg viewBox="0 0 24 24" width="28" height="28" stroke="#fff" strokeWidth="2" strokeLinecap="round" fill="none">
             <line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="14" y2="12"/><line x1="4" y1="18" x2="18" y2="18"/>
@@ -1394,7 +1784,7 @@ function Admin() {
           transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
         }}>
         <div className={styles.sidebarHeader}>
-          <h2>🚀 Aivox Pro</h2>
+          <h2><InlineIcon name="layers" size={20} color="#8c82f2" style={{ verticalAlign:'-3px' }} />Aivox Pro</h2>
           <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
             {isDesktop && (
               <button onClick={() => setIsSidebarVisible(false)}
@@ -1404,12 +1794,12 @@ function Admin() {
                 </svg>
               </button>
             )}
-            {!isDesktop && <button className={styles.closeMenuBtn} onClick={() => setIsMobileMenuOpen(false)}>✕</button>}
+            {!isDesktop && <button className={styles.closeMenuBtn} onClick={() => setIsMobileMenuOpen(false)}><Icon name="close" size={18} /></button>}
           </div>
         </div>
 
         <div className={styles.autoRefreshBadge}>
-          <span>🔄 Auto Refresh {autoRefresh ? `(${countdown}s)` : 'OFF'}</span>
+          <span style={{ display:'inline-flex', alignItems:'center', gap:6 }}><Icon name="refresh" size={14} spin={autoRefresh} />Auto Refresh {autoRefresh ? `(${countdown}s)` : 'OFF'}</span>
           <label className={styles.autoRefreshToggle}>
             <input type="checkbox" checked={autoRefresh} onChange={e => setAutoRefresh(e.target.checked)} />
             <span className={styles.toggleSlider}></span>
@@ -1418,7 +1808,7 @@ function Admin() {
 
         {/* Today's quick stats in sidebar (logs load hone ke baad numbers aate hain) */}
         <div style={{ margin:'0 16px 16px', background:'rgba(140,130,242,0.08)', borderRadius:10, padding:'10px 14px', border:'1px solid rgba(140,130,242,0.2)' }}>
-          <div style={{ fontSize:10, color:'#8c82f2', fontWeight:700, textTransform:'uppercase', letterSpacing:1, marginBottom:8 }}>📅 Today</div>
+          <div style={{ fontSize:10, color:'#8c82f2', fontWeight:700, textTransform:'uppercase', letterSpacing:1, marginBottom:8, display:'flex', alignItems:'center', gap:6 }}><Icon name="calendar" size={12} />Today</div>
           <div style={{ display:'flex', justifyContent:'space-between', fontSize:12 }}>
             <div style={{ textAlign:'center' }}>
               <div style={{ color:'#fff', fontWeight:800, fontSize:16 }}>{logsReady ? todayRequests : '—'}</div>
@@ -1436,39 +1826,39 @@ function Admin() {
         </div>
 
         <NavSection label="Main">
-          <NavBtn tab="overview">📊 Overview</NavBtn>
-          <NavBtn tab="chats">💬 User Chats</NavBtn>
-          <NavBtn tab="search">🔍 Live Search</NavBtn>
-          <NavBtn tab="features">✨ God-Mode Stats</NavBtn>
+          <NavBtn tab="overview" icon="overview">Overview</NavBtn>
+          <NavBtn tab="chats" icon="message">User Chats</NavBtn>
+          <NavBtn tab="search" icon="search">Live Search</NavBtn>
+          <NavBtn tab="features" icon="sparkles">God-Mode Stats</NavBtn>
         </NavSection>
 
         <NavSection label="Access & Users">
-          <NavBtn tab="usermanagement">👥 User Accounts</NavBtn>
-          <NavBtn tab="fingerprint">🔏 Fingerprints</NavBtn>
-          <NavBtn tab="depth">💬 Conv. Depth</NavBtn>
-          <NavBtn tab="heatmap">🌡️ Hour Heatmap</NavBtn>
+          <NavBtn tab="usermanagement" icon="users">User Accounts</NavBtn>
+          <NavBtn tab="fingerprint" icon="fingerprint">Fingerprints</NavBtn>
+          <NavBtn tab="depth" icon="layers">Conv. Depth</NavBtn>
+          <NavBtn tab="heatmap" icon="grid">Hour Heatmap</NavBtn>
         </NavSection>
 
         <NavSection label="AI & Quality">
-          <NavBtn tab="performance">⚡ AI Performance</NavBtn>
-          <NavBtn tab="quality">📈 Quality Meter</NavBtn>
-          <NavBtn tab="errors">⚠️ Error Monitor</NavBtn>
-          <NavBtn tab="prompts">🧠 Prompt Intel</NavBtn>
-          <NavBtn tab="wordcloud">☁️ Word Cloud</NavBtn>
+          <NavBtn tab="performance" icon="zap">AI Performance</NavBtn>
+          <NavBtn tab="quality" icon="trendingUp">Quality Meter</NavBtn>
+          <NavBtn tab="errors" icon="alertTriangle">Error Monitor</NavBtn>
+          <NavBtn tab="prompts" icon="terminal">Prompt Intel</NavBtn>
+          <NavBtn tab="wordcloud" icon="cloud">Word Cloud</NavBtn>
         </NavSection>
 
         <NavSection label="Device & Geo">
-          <NavBtn tab="devices">📱 Devices</NavBtn>
-          <NavBtn tab="hardware">🖥️ HW Leaderboard</NavBtn>
-          <NavBtn tab="geography">🌍 Geo & Local</NavBtn>
-          <NavBtn tab="network">📡 Network</NavBtn>
+          <NavBtn tab="devices" icon="smartphone">Devices</NavBtn>
+          <NavBtn tab="hardware" icon="cpu">HW Leaderboard</NavBtn>
+          <NavBtn tab="geography" icon="globe">Geo & Local</NavBtn>
+          <NavBtn tab="network" icon="wifi">Network</NavBtn>
         </NavSection>
 
         <NavSection label="Finance & Report">
-          <NavBtn tab="roaster">🔥 Roaster</NavBtn>
-          <NavBtn tab="economics">💰 Token Economics</NavBtn>
-          <NavBtn tab="report">📋 Analytics Report</NavBtn>
-          <NavBtn tab="system">⚙️ System Logs</NavBtn>
+          <NavBtn tab="roaster" icon="flame">Roaster</NavBtn>
+          <NavBtn tab="economics" icon="dollar">Token Economics</NavBtn>
+          <NavBtn tab="report" icon="fileText">Analytics Report</NavBtn>
+          <NavBtn tab="system" icon="settings">System Logs</NavBtn>
         </NavSection>
       </aside>
 
@@ -1489,13 +1879,13 @@ function Admin() {
           <div className={styles.sectionFadeIn} style={{ display:'block', height:'auto', paddingBottom:'60px' }}>
             <header className={styles.pageHeader}>
               <div style={padLeft}>
-                <h1>📊 Dashboard Overview</h1>
+                <h1><TitleIcon name="overview" />Dashboard Overview</h1>
                 <p>High-level metrics aur API usage — sab ek jagah.</p>
               </div>
               <div className={styles.pageHeaderRight}>
-                <span className={styles.refreshCountdown}>{autoRefresh ? `🔄 ${countdown}s` : '⏸ Manual'}</span>
+                <span className={styles.refreshCountdown} style={{ display:'inline-flex', alignItems:'center', gap:5 }}><Icon name={autoRefresh ? 'refresh' : 'pause'} size={13} spin={autoRefresh} />{autoRefresh ? `${countdown}s` : 'Manual'}</span>
                 <div className={styles.liveBadge}><span className={styles.pulse}></span> LIVE</div>
-                <button onClick={fetchData} disabled={isRefreshing} className={styles.actionBtn}>{isRefreshing ? '⏳ Refreshing…' : '🔄 Refresh'}</button>
+                <button onClick={fetchData} disabled={isRefreshing} className={styles.actionBtn}><span style={{ display:'inline-flex', alignItems:'center', gap:6 }}><Icon name="refresh" size={14} spin={isRefreshing} />{isRefreshing ? 'Refreshing…' : 'Refresh'}</span></button>
               </div>
             </header>
 
@@ -1511,19 +1901,19 @@ function Admin() {
 
             {/* Daily Tokens Chart */}
             <div className={styles.analyticsCard} style={{ marginBottom:24 }}>
-              <h3>📈 Daily Token Usage (Last 14 Days)</h3>
+              <h3>Daily Token Usage (Last 14 Days)</h3>
               <DailyChart data={dailyData} valueKey="tokens" label="Tokens" color="#8c82f2" formatter={v => v > 1000 ? `${(v/1000).toFixed(1)}K` : v} />
             </div>
 
             {/* Daily Cost Chart */}
             <div className={styles.analyticsCard} style={{ marginBottom:24 }}>
-              <h3>💰 Daily Cost in USD (Last 14 Days)</h3>
+              <h3>Daily Cost in USD (Last 14 Days)</h3>
               <DailyChart data={dailyData} valueKey="cost" label="Cost" color="#00ff80" formatter={v => `$${v.toFixed(3)}`} />
             </div>
 
             {/* Hourly Heatmap quick view */}
             <div className={styles.analyticsCard} style={{ marginBottom:24 }}>
-              <h3>🌡️ Today's Hourly Traffic</h3>
+              <h3>Today's Hourly Traffic</h3>
               <div className={styles.heatmapGrid}>
                 {hourlyData.map((count, h) => {
                   const intensity = count / maxHourly;
@@ -1574,9 +1964,9 @@ function Admin() {
         {activeTab === 'economics' && (
           <div className={styles.sectionFadeIn} style={{ display:'block', height:'auto', paddingBottom:'60px' }}>
             <header className={styles.pageHeader}>
-              <div style={padLeft}><h1>💰 Token Economics</h1><p>Daily spending, model costs aur full token breakdown.</p></div>
+              <div style={padLeft}><h1><TitleIcon name="dollar" />Token Economics</h1><p>Daily spending, model costs aur full token breakdown.</p></div>
               <div className={styles.pageHeaderRight}>
-                <button onClick={downloadCSV} className={`${styles.actionBtn} ${styles.actionBtnSuccess}`}>📥 CSV with Cost</button>
+                <button onClick={downloadCSV} className={`${styles.actionBtn} ${styles.actionBtnSuccess}`}><span style={{ display:'inline-flex', alignItems:'center', gap:6 }}><Icon name="download" size={14} />CSV with Cost</span></button>
               </div>
             </header>
 
@@ -1590,13 +1980,13 @@ function Admin() {
 
             {/* Daily cost chart */}
             <div className={styles.analyticsCard} style={{ marginBottom:24 }}>
-              <h3>💰 Daily Cost Trend (USD) — Last 14 Days</h3>
+              <h3>Daily Cost Trend (USD) — Last 14 Days</h3>
               <DailyChart data={dailyData} valueKey="cost" color="#00ff80" formatter={v => `$${v.toFixed(3)}`} />
             </div>
 
             {/* Daily token chart */}
             <div className={styles.analyticsCard} style={{ marginBottom:24 }}>
-              <h3>📊 Daily Token Consumption — Last 14 Days</h3>
+              <h3>Daily Token Consumption — Last 14 Days</h3>
               <DailyChart data={dailyData} valueKey="tokens" color="#f5b942" formatter={v => v >= 1000 ? `${(v/1000).toFixed(1)}K` : String(v)} />
             </div>
 
@@ -1676,7 +2066,7 @@ function Admin() {
               </div>
 
               <div style={{ marginTop:16, padding:'12px 16px', background:'rgba(0,255,128,0.06)', borderRadius:10, border:'1px solid rgba(0,255,128,0.15)' }}>
-                <div style={{ fontSize:12, color:'#8a8d9e', marginBottom:4 }}>⚠️ Note: Costs are estimates based on public Claude/OpenAI API rates. Actual billing depends on your provider.</div>
+                <div style={{ fontSize:12, color:'#8a8d9e', marginBottom:4 }}><InlineIcon name="alertTriangle" size={13} color="#f5b942" />Note: Costs are estimates based on public Claude/OpenAI API rates. Actual billing depends on your provider.</div>
                 <div style={{ fontSize:13, color:'#00ff80', fontWeight:600 }}>Total Estimated: ${totalCostUSD.toFixed(5)} USD</div>
               </div>
             </div>
@@ -1689,7 +2079,7 @@ function Admin() {
         {activeTab === 'roaster' && (
           <div className={styles.sectionFadeIn} style={{ display:'block', height:'auto', paddingBottom:'60px' }}>
             <header className={styles.pageHeader}>
-              <div style={padLeft}><h1>🔥 Roaster Analytics</h1><p>Roast mode vs Normal mode ka detailed breakdown.</p></div>
+              <div style={padLeft}><h1><TitleIcon name="flame" />Roaster Analytics</h1><p>Roast mode vs Normal mode ka detailed breakdown.</p></div>
             </header>
 
             <div className={styles.statsGrid}>
@@ -1701,7 +2091,7 @@ function Admin() {
 
             <div className={styles.analyticsGrid}>
               <div className={styles.analyticsCard}>
-                <h3>🔥 Roast vs Normal Comparison</h3>
+                <h3>Roast vs Normal Comparison</h3>
                 {[
                   { label:'Requests', roastV:roasts, normalV:normalCount },
                   { label:'Tokens', roastV:roastTokens, normalV:normalTokens },
@@ -1709,11 +2099,11 @@ function Admin() {
                   <div key={row.label} style={{ marginBottom:20 }}>
                     <div style={{ fontSize:13, color:'#8a8d9e', marginBottom:8, fontWeight:600 }}>{row.label}</div>
                     <div style={{ display:'flex', gap:6, alignItems:'center', fontSize:12, overflow:'hidden' }}>
-                      <span style={{ color:'#ff4d4f', minWidth:56, fontSize:11 }}>🔥 {row.roastV.toLocaleString()}</span>
+                      <span style={{ color:'#ff4d4f', minWidth:56, fontSize:11 }}><InlineIcon name="flame" size={12} style={{ marginRight:3 }} />{row.roastV.toLocaleString()}</span>
                       <div style={{ flex:1, minWidth:0, background:'rgba(0,0,0,0.3)', borderRadius:6, height:10, overflow:'hidden' }}>
                         <div style={{ width:`${(row.roastV/(row.roastV+row.normalV||1))*100}%`, height:'100%', background:'linear-gradient(90deg,#ff4d4f,#ff6b9d)', borderRadius:6 }} />
                       </div>
-                      <span style={{ color:'#8c82f2', minWidth:56, textAlign:'right', fontSize:11 }}>{row.normalV.toLocaleString()} ✅</span>
+                      <span style={{ color:'#8c82f2', minWidth:56, textAlign:'right', fontSize:11 }}>{row.normalV.toLocaleString()}<InlineIcon name="checkCircle" size={12} color="#8c82f2" style={{ marginLeft:4, marginRight:0 }} /></span>
                     </div>
                   </div>
                 ))}
@@ -1729,37 +2119,37 @@ function Admin() {
                   .map(u => (
                     <div key={u.id} className={styles.progressRow}>
                       <div className={styles.progressLabel}>
-                        <span>🔥 {u.userName}</span>
+                        <span><InlineIcon name="flame" size={13} color="#ff4d4f" />{u.userName}</span>
                         <span style={{ color:'#ff4d4f', fontWeight:700 }}>{u.roastCount} roasts</span>
                       </div>
                       <MiniBar value={u.roastCount} max={Math.max(...Object.values(chatGroups).map(uu=>uu.messages.filter(m=>m.isRoasterMode).length),1)} color="#ff4d4f" />
                     </div>
                   ))}
                 {Object.values(chatGroups).every(u=>u.messages.every(m=>!m.isRoasterMode)) && (
-                  <p style={{ color:'#555', textAlign:'center', padding:'20px 0' }}>Koi roast nahi hua abhi 😅</p>
+                  <p style={{ color:'#555', textAlign:'center', padding:'20px 0' }}>Koi roast nahi hua abhi</p>
                 )}
               </div>
             </div>
 
             <div className={styles.analyticsCard} style={{ marginTop:24 }}>
-              <h3>Recent Roasts 🔥</h3>
+              <h3>Recent Roasts</h3>
               <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
                 {logs.filter(l=>l.isRoasterMode).slice(0,10).map(log => (
                   <div key={log.id} style={{ background:'rgba(255,77,79,0.08)', border:'1px solid rgba(255,77,79,0.2)', borderRadius:12, padding:'14px 18px' }}>
                     <div style={{ display:'flex', justifyContent:'space-between', marginBottom:8 }}>
-                      <span className={styles.sysTag} style={{ background:'#ff4d4f', color:'#fff' }}>🔥 {log.userName || 'Anonymous'}</span>
+                      <span className={styles.sysTag} style={{ background:'#ff4d4f', color:'#fff' }}><InlineIcon name="flame" size={11} color="#fff" style={{ marginRight:4 }} />{log.userName || 'Anonymous'}</span>
                       <span style={{ fontSize:11, color:'#8a8d9e' }}>{new Date(log.timestamp).toLocaleString()}</span>
                     </div>
                     {/* 🔥 ADMIN: SHOW ATTACHED IMAGE IF ANY 🔥 */}
                     <div style={{ fontSize:13, color:'#ff9999', fontStyle:'italic', marginBottom:8 }}>
-                      {log.attachedImage && <span title="Image Attached">📸 </span>}
+                      {log.attachedImage && <span title="Image Attached"><InlineIcon name="image" size={13} color="#00e5ff" /></span>}
                       "{log.prompt?.slice(0,120)}{(log.prompt?.length||0)>120?'…':''}"
                     </div>
                     <div style={{ fontSize:12, color:'#cdd6f4' }}>{log.response?.slice(0,200)}{(log.response?.length||0)>200?'…':''}</div>
                   </div>
                 ))}
                 {!logs.some(l=>l.isRoasterMode) && (
-                  <p style={{ color:'#555', textAlign:'center', padding:'40px' }}>Koi roast data nahi mila 🤷‍♂️</p>
+                  <p style={{ color:'#555', textAlign:'center', padding:'40px' }}>Koi roast data nahi mila</p>
                 )}
               </div>
             </div>
@@ -1772,7 +2162,7 @@ function Admin() {
         {activeTab === 'prompts' && (
           <div className={styles.sectionFadeIn} style={{ display:'block', height:'auto', paddingBottom:'60px' }}>
             <header className={styles.pageHeader}>
-              <div style={padLeft}><h1>🧠 Prompt Intel</h1><p>User behavior analysis — typing speed, hesitation, prompt patterns.</p></div>
+              <div style={padLeft}><h1><TitleIcon name="terminal" />Prompt Intel</h1><p>User behavior analysis — typing speed, hesitation, prompt patterns.</p></div>
             </header>
 
             <div className={styles.statsGrid}>
@@ -1813,7 +2203,8 @@ function Admin() {
             {/* Unsent prompts vault */}
             <div>
               <h2 style={{ color:'#c542f5', marginBottom:15, display:'flex', alignItems:'center', gap:10 }}>
-                🕵️ Hesitation Vault
+                <Icon name="eyeOff" size={22} />
+                Hesitation Vault
                 <span className={styles.sysTag} style={{ background:'#ff4d4f', color:'#fff', fontSize:10 }}>CONFIDENTIAL</span>
               </h2>
               <div className={styles.tableContainer} style={{ overflowX:'auto' }}>
@@ -1834,11 +2225,12 @@ function Admin() {
                         </td>
                       </tr>
                     )) : (
-                      <tr><td colSpan={3} style={{textAlign:'center',color:'#555',padding:'40px'}}>Kisi ne kuch delete nahi kiya abhi 🕵️‍♂️</td></tr>
+                      <tr><td colSpan={3} style={{textAlign:'center',color:'#555',padding:'40px'}}>Kisi ne kuch delete nahi kiya abhi</td></tr>
                     )}
                   </tbody>
                 </table>
               </div>
+              {pager.unsent.hasMore && <LoadMoreButton onClick={() => loadMore('unsent')} loading={pager.unsent.loadingMore}>Load older entries</LoadMoreButton>}
             </div>
           </div>
         )}
@@ -1849,7 +2241,7 @@ function Admin() {
         {activeTab === 'geography' && (
           <div className={styles.sectionFadeIn} style={{ display:'block', height:'auto', paddingBottom:'60px' }}>
             <header className={styles.pageHeader}>
-              <div style={padLeft}><h1>🌍 Geo & Locale</h1><p>Timezone, language aur region breakdown.</p></div>
+              <div style={padLeft}><h1><TitleIcon name="globe" />Geo & Locale</h1><p>Timezone, language aur region breakdown.</p></div>
             </header>
 
             <div className={styles.statsGrid}>
@@ -1861,7 +2253,7 @@ function Admin() {
 
             <div className={styles.analyticsGrid} style={{ marginBottom:24 }}>
               <div className={styles.analyticsCard}>
-                <h3>🌍 Timezone Distribution</h3>
+                <h3>Timezone Distribution</h3>
                 {Object.entries(timezoneStats).sort((a,b)=>b[1]-a[1]).slice(0,15).map(([tz, count]) => (
                   <div key={tz} className={styles.progressRow}>
                     <div className={styles.progressLabel}>
@@ -1874,7 +2266,7 @@ function Admin() {
               </div>
 
               <div className={styles.analyticsCard}>
-                <h3>🗣️ Language Distribution</h3>
+                <h3>Language Distribution</h3>
                 {Object.entries(langStats).sort((a,b)=>b[1]-a[1]).slice(0,15).map(([lang, count]) => (
                   <div key={lang} className={styles.progressRow}>
                     <div className={styles.progressLabel}>
@@ -1889,7 +2281,7 @@ function Admin() {
 
             {/* Day of week activity */}
             <div className={styles.analyticsCard}>
-              <h3>📅 Activity by Day of Week</h3>
+              <h3>Activity by Day of Week</h3>
               {(() => {
                 const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
                 const dayCounts = days.map(d => ({ day: d, count: logs.filter(l => l.dayOfWeek === d).length }));
@@ -1916,7 +2308,7 @@ function Admin() {
         {activeTab === 'performance' && (
           <div className={styles.sectionFadeIn} style={{ display:'block', height:'auto', paddingBottom:'60px' }}>
             <header className={styles.pageHeader}>
-              <div style={padLeft}><h1>⚡ AI Performance</h1><p>Model speed, success rate aur response times.</p></div>
+              <div style={padLeft}><h1><TitleIcon name="zap" />AI Performance</h1><p>Model speed, success rate aur response times.</p></div>
             </header>
 
             <div className={styles.statsGrid}>
@@ -1972,14 +2364,14 @@ function Admin() {
         {activeTab === 'features' && (
           <div className={styles.sectionFadeIn} style={{ display:'block', height:'auto', paddingBottom:'60px' }}>
             <header className={styles.pageHeader}>
-              <div style={padLeft}><h1>✨ God-Mode Analytics</h1><p>Live tracking of Aivox Pro exclusive capabilities.</p></div>
+              <div style={padLeft}><h1><TitleIcon name="sparkles" />God-Mode Analytics</h1><p>Live tracking of Aivox Pro exclusive capabilities.</p></div>
             </header>
 
             <div className={styles.statsGrid}>
               <StatCard title="Alter-Egos Active" value={Object.values(activeEgosData).reduce((a,b)=>a+b,0)} sub={`Top: ${Object.entries(activeEgosData).sort((a,b)=>b[1]-a[1])[0]?.[0]||'smart'}`} color="#8c82f2" />
               <StatCard title="Memories Locked" value={totalLockedMemories} sub="Across all users" color="#00ff80" />
               <StatCard title="Avg. Vibe Sync" value={`${avgVibeSync}%`} sub="Energy match rate" color="#00e5ff" />
-              <StatCard title="Hesitation Vault" value={unsentPrompts.length} sub="Deleted prompts captured" color="#c542f5" />
+              <StatCard title="Hesitation Vault" value={`${unsentPrompts.length}${pager.unsent.hasMore ? '+' : ''}`} sub="Deleted prompts captured" color="#c542f5" />
             </div>
 
             <div className={styles.analyticsGrid} style={{ marginTop:24 }}>
@@ -2029,7 +2421,7 @@ function Admin() {
 
             {/* Live User Modes */}
             <div style={{ marginTop:40 }}>
-              <h2 style={{ color:'#00e5ff', marginBottom:15 }}>🎭 Live User Modes & Memories</h2>
+              <h2 style={{ color:'#00e5ff', marginBottom:15 }}><InlineIcon name="users" size={20} style={{ verticalAlign:'-3px' }} />Live User Modes & Memories</h2>
               <div className={styles.tableContainer} style={{ overflowX:'auto' }}>
                 <table className={styles.adminTable} style={{ minWidth:800 }}>
                   <thead><tr><th>User & Device</th><th>Active Mode</th><th>Locked Memories</th><th>Last Active</th></tr></thead>
@@ -2042,7 +2434,7 @@ function Admin() {
                         </td>
                         <td>
                           <span className={styles.sysTag} style={{ background:u.ego==='savage'?'#ff4d4f':u.ego==='corporate'?'#f5b942':u.ego==='genz'?'#00e5ff':'#2a2a40', color:u.ego==='corporate'?'#000':'#fff', textTransform:'uppercase' }}>
-                            {u.ego === 'smart' ? '✨ Normal' : u.ego}
+                            {u.ego === 'smart' ? 'Normal' : u.ego}
                           </span>
                         </td>
                         <td style={{ maxWidth:350, whiteSpace:'normal', wordBreak:'break-word' }}>
@@ -2057,7 +2449,7 @@ function Admin() {
                         <td className={styles.timeCol} style={{fontSize:'11px'}}>{new Date(u.lastActive).toLocaleString()}</td>
                       </tr>
                     ))}
-                    {liveUserModes.length === 0 && <tr><td colSpan={4} style={{textAlign:'center',color:'#555',padding:'40px'}}>Koi data nahi 🤷‍♂️</td></tr>}
+                    {liveUserModes.length === 0 && <tr><td colSpan={4} style={{textAlign:'center',color:'#555',padding:'40px'}}>Koi data nahi</td></tr>}
                   </tbody>
                 </table>
               </div>
@@ -2066,7 +2458,7 @@ function Admin() {
             {/* Hesitation Vault */}
             <div style={{ marginTop:40 }}>
               <h2 style={{ color:'#c542f5', marginBottom:15 }}>
-                🕵️ Hesitation Vault <span className={styles.sysTag} style={{background:'#ff4d4f',color:'#fff',fontSize:10}}>CONFIDENTIAL</span>
+                <InlineIcon name="eyeOff" size={20} style={{ verticalAlign:'-3px' }} />Hesitation Vault <span className={styles.sysTag} style={{background:'#ff4d4f',color:'#fff',fontSize:10}}>CONFIDENTIAL</span>
               </h2>
               <div className={styles.tableContainer} style={{ overflowX:'auto' }}>
                 <table className={styles.adminTable} style={{ minWidth:800 }}>
@@ -2084,11 +2476,12 @@ function Admin() {
                         </td>
                       </tr>
                     )) : (
-                      <tr><td colSpan={3} style={{textAlign:'center',color:'#555',padding:'40px'}}>Kisi ne kuch delete nahi kiya abhi 🕵️‍♂️</td></tr>
+                      <tr><td colSpan={3} style={{textAlign:'center',color:'#555',padding:'40px'}}>Kisi ne kuch delete nahi kiya abhi</td></tr>
                     )}
                   </tbody>
                 </table>
               </div>
+              {pager.unsent.hasMore && <LoadMoreButton onClick={() => loadMore('unsent')} loading={pager.unsent.loadingMore}>Load older entries</LoadMoreButton>}
             </div>
           </div>
         )}
@@ -2100,7 +2493,7 @@ function Admin() {
         {activeTab === 'chats' && (
           <div className={styles.sectionFadeIn} style={{ height:'100%', overflow:'hidden' }}>
             <header className={`${styles.pageHeader} ${isMobileChatView ? styles.hideOnMobile : ''}`}>
-              <div style={padLeft}><h1>💬 Live User Chats</h1><p>User naam se search karke messages dekho.</p></div>
+              <div style={padLeft}><h1><TitleIcon name="message" />Live User Chats</h1><p>User naam se search karke messages dekho.</p></div>
             </header>
             <div className={styles.chatSplitView}>
               <div className={`${styles.userListSidebar} ${isMobileChatView ? styles.hideOnMobile : ''}`}>
@@ -2110,11 +2503,11 @@ function Admin() {
                     value={chatSearchQuery} onChange={e => setChatSearchQuery(e.target.value)}
                     style={{ width:'100%', padding:'8px 12px', borderRadius:'8px', border:'1px solid #3a3a5e', background:'#0b0a14', color:'#fff', fontSize:'13px', outline:'none', boxSizing:'border-box' }} />
                 </div>
-                <div className={styles.userListScroll}>
+                <div className={styles.userListScroll} onScroll={handleUserListScroll}>
                   {filteredChatUsers.map(user => (
-                    <div key={user.id} onClick={() => { setSelectedUser(user); setIsMobileChatView(true); }}
-                      className={`${styles.userListItem} ${selectedUser?.id === user.id ? styles.activeUserItem : ''}`}>
-                      <div className={styles.userAvatar}>{user.os?.includes('Mac')||user.os?.includes('iOS')?'🍎':user.os?.includes('Android')?'🤖':'💻'}</div>
+                    <div key={user.gid} onClick={() => { setSelectedGid(user.gid); setIsMobileChatView(true); }}
+                      className={`${styles.userListItem} ${selectedGid === user.gid ? styles.activeUserItem : ''}`}>
+                      <div className={styles.userAvatar}><OsIcon os={user.os} size={20} /></div>
                       <div className={styles.userInfo}>
                         <h4>{user.userName}</h4>
                         {/* 🔥 ADMIN: SHOW NAME ALIASES IN LIST 🔥 */}
@@ -2124,11 +2517,16 @@ function Admin() {
                           </div>
                         )}
                         <p>{user.device} • {user.os}</p>
-                        <span style={{fontSize:'10px',color:'#555'}}>{user.messages.length} msgs | {user.network} | ID: {user.id}</span>
+                        <span style={{fontSize:'10px',color:'#555'}}>{user.messages.length}{(fetchedFpRef.current.has(user.id) || !pager.chatlist.hasMore) ? '' : '+'} msgs | {user.network} | ID: {user.id}</span>
                       </div>
                     </div>
                   ))}
-                  {filteredChatUsers.length === 0 && <div style={{padding:'20px',textAlign:'center',color:'#888',fontSize:'13px'}}>No user found 🤷‍♂️</div>}
+                  {filteredChatUsers.length === 0 && <div style={{padding:'20px',textAlign:'center',color:'#888',fontSize:'13px'}}>No user found</div>}
+                  {pager.chatlist.hasMore && (
+                    <div style={{ padding:'4px 15px 18px' }}>
+                      <LoadMoreButton onClick={() => loadMore('chatlist')} loading={pager.chatlist.loadingMore}>Load more users</LoadMoreButton>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -2136,7 +2534,7 @@ function Admin() {
                 {selectedUser ? (
                   <>
                     <div className={styles.chatWindowHeader}>
-                      <button className={styles.mobileBackBtn} onClick={() => setIsMobileChatView(false)}>⬅️</button>
+                      <button className={styles.mobileBackBtn} onClick={() => setIsMobileChatView(false)} title="Back to users" aria-label="Back to users"><Icon name="arrowLeft" size={20} /></button>
                       <div>
                         <h3 style={{margin:0}}>{selectedUser.userName}</h3>
                         {/* 🔥 ADMIN: SHOW NAME ALIASES IN HEADER 🔥 */}
@@ -2158,12 +2556,10 @@ function Admin() {
                         </IconButton>
                       </div>
                     </div>
-                    <div className={styles.chatMessagesArea}>
-                      {/* Full screen mein list wahan dikhti hai — yahan dobara render nahi hoti (lag free) */}
-                      {!isChatFullscreen && chatMessagesList}
-                    </div>
+                    {/* Full screen mein pane wahan dikhta hai — yahan dobara render nahi hota (lag free) */}
+                    {isChatFullscreen ? <div className={styles.chatMessagesArea}></div> : chatPane()}
                   </>
-                ) : <div className={styles.noUserSelected}><h2>👈 Select a user</h2></div>}
+                ) : <div className={styles.noUserSelected}><h2>Select a user</h2></div>}
               </div>
             </div>
           </div>
@@ -2175,7 +2571,7 @@ function Admin() {
         {activeTab === 'search' && (
           <div className={styles.sectionFadeIn} style={{ display:'block', height:'auto', paddingBottom:'60px' }}>
             <header className={styles.pageHeader}>
-              <div style={padLeft}><h1>🔍 Live Search</h1><p>Prompts, responses, devices — sab ek jagah dhundo.</p></div>
+              <div style={padLeft}><h1><TitleIcon name="search" />Live Search</h1><p>Prompts, responses, devices — sab ek jagah dhundo.</p></div>
             </header>
             <div className={styles.searchBar}>
               <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -2202,7 +2598,7 @@ function Admin() {
                               style={{ fontSize: '10px', background: 'rgba(0, 229, 255, 0.1)', color: '#00e5ff', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(0,229,255,0.2)', display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}
                               onClick={() => setFullScreenImage(log.attachedImage)}
                             >
-                              📸 Image Attached
+                              <Icon name="image" size={11} /> Image Attached
                             </span>
                           </div>
                         )}
@@ -2214,7 +2610,7 @@ function Admin() {
                       <td><span style={{color:'#00ff80',fontSize:'11px',fontWeight:'700'}}>${estimateCost(log).toFixed(4)}</span></td>
                     </tr>
                   ))}
-                  {searchLogs.length === 0 && <tr><td colSpan={7} style={{textAlign:'center',color:'#555',padding:'40px'}}>Kuch nahi mila "{searchQuery}" 🤔</td></tr>}
+                  {searchLogs.length === 0 && <tr><td colSpan={7} style={{textAlign:'center',color:'#555',padding:'40px'}}>Kuch nahi mila "{searchQuery}"</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -2229,7 +2625,7 @@ function Admin() {
         {activeTab === 'usermanagement' && (
           <div className={styles.sectionFadeIn} style={{ display:'block', height:'auto', paddingBottom:'60px' }}>
             <header className={styles.pageHeader}>
-              <div style={padLeft}><h1>👥 Registered Users</h1><p>All accounts manage karo — role assign karo, delete karo.</p></div>
+              <div style={padLeft}><h1><TitleIcon name="users" />Registered Users</h1><p>All accounts manage karo — role assign karo, delete karo.</p></div>
             </header>
             <div className={styles.searchBar} style={{ marginBottom:20 }}>
               <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -2251,7 +2647,7 @@ function Admin() {
                     const joinedVal = getJoinedValue(user);
                     const lastVal = getLastLoginValue(user);
                     // Fallback dates ke liye chat logs abhi aa rahe hain?
-                    const fallbackPending = dataStatus.logs !== 'loaded' && dataStatus.logs !== 'error';
+                    const fallbackPending = allLogsBusy || (dataStatus.logs !== 'loaded' && dataStatus.logs !== 'error');
                     return (
                       <tr key={user.id}>
                         <td><div className={styles.sysTag} style={{background:'#8c82f2',color:'#fff'}}>{user.name||user.displayName||'Unknown'}</div></td>
@@ -2302,7 +2698,7 @@ function Admin() {
         {activeTab === 'heatmap' && (
           <div className={styles.sectionFadeIn} style={{ display:'block', height:'auto', paddingBottom:'60px' }}>
             <header className={styles.pageHeader}>
-              <div style={padLeft}><h1>🌡️ Hourly Traffic Heatmap</h1><p>0 se 23 tak — konse ghante mein sabse zyada traffic.</p></div>
+              <div style={padLeft}><h1><TitleIcon name="grid" />Hourly Traffic Heatmap</h1><p>0 se 23 tak — konse ghante mein sabse zyada traffic.</p></div>
             </header>
             <div className={styles.analyticsCard} style={{ marginBottom:24 }}>
               <h3>Requests Per Hour</h3>
@@ -2352,7 +2748,7 @@ function Admin() {
         {activeTab === 'fingerprint' && (
           <div className={styles.sectionFadeIn} style={{ display:'block', height:'auto', paddingBottom:'60px' }}>
             <header className={styles.pageHeader}>
-              <div style={padLeft}><h1>🔏 User Fingerprints</h1><p>Har unique device ka stable fingerprint ID + engagement score + cost.</p></div>
+              <div style={padLeft}><h1><TitleIcon name="fingerprint" />User Fingerprints</h1><p>Har unique device ka stable fingerprint ID + engagement score + cost.</p></div>
               <div className={styles.pageHeaderRight}><span style={{fontSize:'13px',color:'#666'}}>{fingerprintData.length} unique users</span></div>
             </header>
             <div className={styles.fingerprintGrid}>
@@ -2360,7 +2756,7 @@ function Admin() {
                 <div key={user.id} className={styles.fingerprintCard}>
                   <div className={styles.fingerprintHeader}>
                     <div>
-                      <div style={{fontSize:'18px',marginBottom:'4px'}}>{user.os?.includes('Mac')||user.os?.includes('iOS')?'🍎':user.os?.includes('Android')?'🤖':'💻'} {user.userName}</div>
+                      <div style={{fontSize:'18px',marginBottom:'4px',display:'flex',alignItems:'center',gap:8}}><OsIcon os={user.os} size={20} /> {user.userName}</div>
                       <div className={styles.fingerprintId}>{user.device} | FP: {user.id}</div>
                     </div>
                     <div>
@@ -2391,7 +2787,7 @@ function Admin() {
         {activeTab === 'wordcloud' && (
           <div className={styles.sectionFadeIn} style={{ display:'block', height:'auto', paddingBottom:'60px' }}>
             <header className={styles.pageHeader}>
-              <div style={padLeft}><h1>☁️ Word Cloud</h1><p>Sabse zyada use hone wale words user prompts mein.</p></div>
+              <div style={padLeft}><h1><TitleIcon name="cloud" />Word Cloud</h1><p>Sabse zyada use hone wale words user prompts mein.</p></div>
             </header>
             <div className={styles.analyticsCard}>
               <h3>Top Prompt Words</h3>
@@ -2406,7 +2802,7 @@ function Admin() {
                       title={`"${word}" — ${count} times`}>{word}</span>
                   );
                 })}
-                {wordFreq.length === 0 && <span style={{color:'#555'}}>Koi data nahi abhi 🤷</span>}
+                {wordFreq.length === 0 && <span style={{color:'#555'}}>Koi data nahi abhi</span>}
               </div>
             </div>
             <div className={styles.analyticsGrid} style={{ marginTop:22 }}>
@@ -2436,7 +2832,7 @@ function Admin() {
         {activeTab === 'quality' && (
           <div className={styles.sectionFadeIn} style={{ display:'block', height:'auto', paddingBottom:'60px' }}>
             <header className={styles.pageHeader}>
-              <div style={padLeft}><h1>📈 Response Quality Meter</h1><p>Tokens per second — model ki efficiency.</p></div>
+              <div style={padLeft}><h1><TitleIcon name="trendingUp" />Response Quality Meter</h1><p>Tokens per second — model ki efficiency.</p></div>
             </header>
             <div className={styles.analyticsGrid}>
               {qualityStats.map(stat => {
@@ -2465,13 +2861,13 @@ function Admin() {
         {activeTab === 'hardware' && (
           <div className={styles.sectionFadeIn} style={{ display:'block', height:'auto', paddingBottom:'60px' }}>
             <header className={styles.pageHeader}>
-              <div style={padLeft}><h1>🖥️ Hardware Leaderboard</h1><p>Sabse powerful devices jo Aivox use kar rahe hain.</p></div>
+              <div style={padLeft}><h1><TitleIcon name="cpu" />Hardware Leaderboard</h1><p>Sabse powerful devices jo Aivox use kar rahe hain.</p></div>
             </header>
             <div className={styles.leaderboardList}>
               {hwLeaderboard.map((hw, i) => (
                 <div key={hw.device+i} className={styles.leaderboardItem}>
                   <div className={`${styles.leaderboardRank} ${i===0?styles.rankGold:i===1?styles.rankSilver:i===2?styles.rankBronze:''}`}>
-                    {i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}
+                    {i<3 ? <Icon name="award" size={20} /> : i+1}
                   </div>
                   <div className={styles.leaderboardInfo}>
                     <div className={styles.leaderboardName}>{hw.device}</div>
@@ -2498,7 +2894,7 @@ function Admin() {
         {activeTab === 'errors' && (
           <div className={styles.sectionFadeIn} style={{ display:'block', height:'auto', paddingBottom:'60px' }}>
             <header className={styles.pageHeader}>
-              <div style={padLeft}><h1>⚠️ Error Monitor</h1><p>Failed requests, slow responses aur model fallback tracking.</p></div>
+              <div style={padLeft}><h1><TitleIcon name="alertTriangle" />Error Monitor</h1><p>Failed requests, slow responses aur model fallback tracking.</p></div>
             </header>
             <div className={styles.errorMonitor} style={{marginBottom:'24px'}}>
               <div className={styles.errorCard}><div className={styles.errorLabel}>Total Fails</div><div className={`${styles.errorRate} ${failedLogs.length>0?styles.statusBad:styles.statusGood}`}>{failedLogs.length}</div><div className={styles.errorSubText}>Model = "Failed" ya empty</div></div>
@@ -2512,7 +2908,7 @@ function Admin() {
                 {Object.entries(modelStats).sort((a,b)=>b[1].count-a[1].count).map(([model, d]) => (
                   <div key={model} className={styles.perfStat}>
                     <span style={{color:model==='Failed'?'#ff4d4f':'inherit'}}>{model}</span>
-                    <strong>{d.count} reqs {model==='Failed'?'❌':'✅'}</strong>
+                    <strong style={{display:'inline-flex',alignItems:'center',gap:6,color:model==='Failed'?'#ff4d4f':'#00ff80'}}>{d.count} reqs <Icon name={model==='Failed'?'xCircle':'checkCircle'} size={15} /></strong>
                   </div>
                 ))}
               </div>
@@ -2535,7 +2931,7 @@ function Admin() {
         {activeTab === 'depth' && (
           <div className={styles.sectionFadeIn} style={{ display:'block', height:'auto', paddingBottom:'60px' }}>
             <header className={styles.pageHeader}>
-              <div style={padLeft}><h1>💬 Conversation Depth</h1><p>Engagement ka asli measure — kitne messages bheje.</p></div>
+              <div style={padLeft}><h1><TitleIcon name="layers" />Conversation Depth</h1><p>Engagement ka asli measure — kitne messages bheje.</p></div>
             </header>
             <div className={styles.analyticsGrid} style={{marginBottom:'24px'}}>
               <div className={styles.analyticsCard}>
@@ -2569,7 +2965,7 @@ function Admin() {
         {activeTab === 'devices' && (
           <div className={styles.sectionFadeIn} style={{ display:'block', height:'auto', paddingBottom:'60px' }}>
             <header className={styles.pageHeader}>
-              <div style={padLeft}><h1>📱 Device Demographics</h1><p>OS aur browser breakdown.</p></div>
+              <div style={padLeft}><h1><TitleIcon name="smartphone" />Device Demographics</h1><p>OS aur browser breakdown.</p></div>
             </header>
             <div className={styles.analyticsGrid}>
               <div className={styles.analyticsCard}>
@@ -2600,7 +2996,7 @@ function Admin() {
         {activeTab === 'network' && (
           <div className={styles.sectionFadeIn} style={{ display:'block', height:'auto', paddingBottom:'60px' }}>
             <header className={styles.pageHeader}>
-              <div style={padLeft}><h1>📡 Network & Environment</h1><p>Connection types aur browser settings.</p></div>
+              <div style={padLeft}><h1><TitleIcon name="wifi" />Network & Environment</h1><p>Connection types aur browser settings.</p></div>
             </header>
             <div className={styles.analyticsGrid}>
               <div className={styles.analyticsCard}>
@@ -2629,10 +3025,10 @@ function Admin() {
           <div className={styles.sectionFadeIn} style={{ display:'block', height:'auto', paddingBottom:'60px' }}>
             <div className={styles.reportHeader}>
               <div style={padLeft}>
-                <p className={styles.reportTitle}>📋 Aivox Analytics Report</p>
+                <p className={styles.reportTitle}><TitleIcon name="fileText" size={20} />Aivox Analytics Report</p>
                 <p className={styles.reportMeta}>Generated: {new Date().toLocaleString()} • {totalRequests} total events</p>
               </div>
-              <button className={styles.printBtn} onClick={() => window.print()}>🖨️ Print / Save PDF</button>
+              <button className={styles.printBtn} onClick={() => window.print()}><span style={{ display:'inline-flex', alignItems:'center', gap:6 }}><Icon name="printer" size={14} />Print / Save PDF</span></button>
             </div>
             <div className={styles.reportGrid}>
               <div className={styles.reportCard}><div className={`${styles.reportCardVal} ${styles.normalColor}`}>{totalRequests}</div><div className={styles.reportCardLabel}>Total Requests</div></div>
@@ -2678,17 +3074,17 @@ function Admin() {
         {activeTab === 'system' && (
           <div className={styles.sectionFadeIn} style={{ display:'block', height:'auto', paddingBottom:'60px' }}>
             <header className={styles.pageHeader}>
-              <div style={padLeft}><h1>⚙️ System Logs</h1><p>Deep hardware, network aur battery data.</p></div>
+              <div style={padLeft}><h1><TitleIcon name="settings" />System Logs</h1><p>Deep hardware, network aur battery data.</p></div>
               <div className={styles.pageHeaderRight}>
-                <button onClick={fetchData} disabled={isRefreshing} className={styles.actionBtn}>{isRefreshing ? '⏳ Refreshing…' : '🔄 Refresh'}</button>
-                <button onClick={downloadCSV} className={`${styles.actionBtn} ${styles.actionBtnSuccess}`}>📥 CSV</button>
+                <button onClick={fetchData} disabled={isRefreshing} className={styles.actionBtn}><span style={{ display:'inline-flex', alignItems:'center', gap:6 }}><Icon name="refresh" size={14} spin={isRefreshing} />{isRefreshing ? 'Refreshing…' : 'Refresh'}</span></button>
+                <button onClick={downloadCSV} className={`${styles.actionBtn} ${styles.actionBtnSuccess}`}><span style={{ display:'inline-flex', alignItems:'center', gap:6 }}><Icon name="download" size={14} />CSV</span></button>
               </div>
             </header>
             <div className={styles.tableContainer} style={{ overflowX:'auto' }}>
               <table className={styles.adminTable} style={{ minWidth:900 }}>
                 <thead><tr><th>Time & Zone</th><th>User & Hardware</th><th>Network & Activity</th><th>Performance</th></tr></thead>
                 <tbody>
-                  {logs.map(log => {
+                  {logs.slice(0, systemVisible).map(log => {
                     const isLove = log.isLoveMsg || log.activeMode === 'lover_girl' || log.activeMode === 'lover_boy' || log.activeEgo === 'lover_girl' || log.activeEgo === 'lover_boy';
                     const isRoast = log.isRoasterMode && !isLove;
 
@@ -2696,7 +3092,7 @@ function Admin() {
                       <tr key={log.id}>
                         <td className={styles.timeCol}>
                           {new Date(log.timestamp).toLocaleString()}
-                          <div className={styles.subText}>🌍 {log.timezone}</div>
+                          <div className={styles.subText}><InlineIcon name="globe" size={11} style={{ marginRight:5 }} />{log.timezone}</div>
                           <div style={{fontSize:'10px',color:'#444',marginTop:'2px',fontFamily:'monospace'}}>FP: {makeFingerprint(log)}</div>
                         </td>
                         <td>
@@ -2706,30 +3102,30 @@ function Admin() {
                             <strong>OS:</strong> {log.os}<br/>
                             <strong>RAM/CPU:</strong> {log.ramMemory||'N/A'}GB | {log.cpuCores||'N/A'} cores<br/>
                             <strong>Screen:</strong> {log.screenResolution}<br/>
-                            <span style={{color:'#f5b942'}}><strong>Battery:</strong> {log.batteryLevel!=null?`${log.batteryLevel}% ${log.batteryCharging?'⚡':'🔋'}`:'Blocked'}</span><br/>
-                            <span style={{color:'#00e5ff'}}><strong>Media:</strong> 🎤 {log.microphoneCount||0} | 📷 {log.cameraCount||0}</span>
+                            <span style={{color:'#f5b942'}}><strong>Battery:</strong> {log.batteryLevel!=null ? <>{log.batteryLevel}% <InlineIcon name={log.batteryCharging?'zap':'battery'} size={12} style={{ marginRight:0 }} /></> : 'Blocked'}</span><br/>
+                            <span style={{color:'#00e5ff'}}><strong>Media:</strong> <InlineIcon name="mic" size={12} style={{ marginRight:3 }} />{log.microphoneCount||0} | <InlineIcon name="camera" size={12} style={{ marginRight:3 }} />{log.cameraCount||0}</span>
                           </div>
                         </td>
                         <td>
-                          <div className={styles.sysTag} style={{background:'#1a3a2a',color:'#00ff80'}}>📶 {(log.network||'WIFI').toUpperCase()}</div>
+                          <div className={styles.sysTag} style={{background:'#1a3a2a',color:'#00ff80'}}><InlineIcon name="wifi" size={12} color="#00ff80" style={{ marginRight:5 }} />{(log.network||'WIFI').toUpperCase()}</div>
                           <div className={styles.subText} style={{lineHeight:'1.6'}}>
                             <strong>Browser:</strong> {log.browserVendor}<br/>
                             <strong>Lang:</strong> {log.language}<br/>
                             <strong>Backspaces:</strong> <span style={{color:'#ff4d4f'}}>{log.backspaceCount||0}</span><br/>
-                            <strong>Touch:</strong> {log.touchSupport?'Yes 👆':'No 🖱️'}
+                            <strong>Touch:</strong> {log.touchSupport?'Yes':'No'}
                           </div>
                         </td>
                         <td>
                           <div className={styles.tokenTotal}>Tokens: {log.totalTokens||0}</div>
                           <div style={{color:'#00ff80',fontSize:'11px',fontWeight:'700',marginTop:2}}>Cost: ${estimateCost(log).toFixed(5)}</div>
-                          <div className={styles.speedColor}>⚡ {log.responseTimeMs?(log.responseTimeMs/1000).toFixed(2)+'s':'N/A'}</div>
+                          <div className={styles.speedColor}><InlineIcon name="zap" size={12} style={{ marginRight:4 }} />{log.responseTimeMs?(log.responseTimeMs/1000).toFixed(2)+'s':'N/A'}</div>
                           
                           <div className={styles.subText}>
-                            🤖 {log.model} {log.attachedImage && <span style={{ color: '#00e5ff', fontWeight: 'bold' }}>📸</span>}
+                            <InlineIcon name="cpu" size={12} style={{ marginRight:5 }} />{log.model} {log.attachedImage && <InlineIcon name="image" size={12} color="#00e5ff" style={{ marginRight:0 }} />}
                           </div>
                           
-                          {isRoast && <div style={{fontSize:'10px',color:'#ff4d4f',marginTop:'2px'}}>🔥 Roaster</div>}
-                          {isLove && <div style={{fontSize:'10px',color:'#ff1493',marginTop:'2px'}}>💖 Love Mode</div>}
+                          {isRoast && <div style={{fontSize:'10px',color:'#ff4d4f',marginTop:'2px'}}><InlineIcon name="flame" size={11} style={{ marginRight:4 }} />Roaster</div>}
+                          {isLove && <div style={{fontSize:'10px',color:'#ff1493',marginTop:'2px'}}><InlineIcon name="heart" size={11} style={{ marginRight:4 }} />Love Mode</div>}
                         </td>
                       </tr>
                     );
@@ -2737,10 +3133,22 @@ function Admin() {
                 </tbody>
               </table>
             </div>
+            {(systemVisible < logs.length || pager.logs.hasMore) && (
+              <LoadMoreButton
+                loading={systemVisible >= logs.length && pager.logs.loadingMore}
+                onClick={() => { if (systemVisible >= logs.length) loadMore('logs'); setSystemVisible(v => v + 50); }}>
+                {systemVisible < logs.length ? `Show more (${Math.min(systemVisible, logs.length)} of ${logs.length}${pager.logs.hasMore ? '+' : ''})` : 'Load older events'}
+              </LoadMoreButton>
+            )}
           </div>
         )}
 
         </>)}
+
+        {/* 🆕 Analytics tabs: sirf latest events load hue hain — poora history ek click mein */}
+        {tabReady && tabNeeds.includes('logs') && (
+          <LogsWindowPill count={logs.length} hasMore={pager.logs.hasMore} busy={allLogsBusy || pager.logs.loadingMore} onLoadAll={loadAllLogs} />
+        )}
       </main>
       {isMobileMenuOpen && <div className={styles.menuOverlay} onClick={() => setIsMobileMenuOpen(false)}></div>}
 
@@ -2754,8 +3162,8 @@ function Admin() {
           <style>{UI_KEYFRAMES}</style>
 
           <div style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 16px', paddingTop:'calc(12px + env(safe-area-inset-top, 0px))', background:'#121120', borderBottom:'1px solid #1f1e2e', flexShrink:0 }}>
-            <div style={{ fontSize:22, flexShrink:0 }}>
-              {selectedUser.os?.includes('Mac')||selectedUser.os?.includes('iOS')?'🍎':selectedUser.os?.includes('Android')?'🤖':'💻'}
+            <div style={{ flexShrink:0, color:'#8c82f2', display:'flex' }}>
+              <OsIcon os={selectedUser.os} size={24} />
             </div>
             <div style={{ minWidth:0, flex:1 }}>
               <div style={{ color:'#fff', fontWeight:800, fontSize:16, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{selectedUser.userName}</div>
@@ -2771,10 +3179,7 @@ function Admin() {
             </button>
           </div>
 
-          <div className={styles.chatMessagesArea}
-            style={{ flex:1, minHeight:0, height:'auto', maxHeight:'none', overflowY:'auto', overscrollBehavior:'contain', WebkitOverflowScrolling:'touch', paddingBottom:'calc(16px + env(safe-area-inset-bottom, 0px))' }}>
-            {chatMessagesList}
-          </div>
+          {chatPane({ flex:1, minHeight:0, height:'auto', maxHeight:'none', overflowY:'auto', overscrollBehavior:'contain', WebkitOverflowScrolling:'touch', paddingBottom:'calc(16px + env(safe-area-inset-bottom, 0px))' })}
         </div>,
         document.body
       )}
@@ -2813,7 +3218,7 @@ function Admin() {
             onMouseOver={(e) => e.currentTarget.style.background = 'rgba(255,77,79,0.8)'}
             onMouseOut={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
           >
-            ✕
+            <Icon name="close" size={20} />
           </button>
         </div>,
         document.body
