@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import styles from './Features.module.css';
+import CodingLab from './CodingLab'; // NEW: Coding Lab (HTML / CSS / JS editor)
 
 const cx = (...a) => a.filter(Boolean).join(' ');
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
@@ -36,6 +37,7 @@ const P = {
   star: 'M12 2l3 6.9 7.5.6-5.7 4.9 1.8 7.3L12 17.8l-6.6 3.9 1.8-7.3-5.7-4.9L9 8.9z',
   scale: 'M12 3v18M5 7h14M5 7l-3 7a3.5 3.5 0 0 0 6 0zM19 7l-3 7a3.5 3.5 0 0 0 6 0zM8 21h8',
   alert: 'M12 3l10 18H2zM12 10v5M12 18h.01',
+  code: 'M16 18l6-6-6-6M8 6l-6 6 6 6', // NEW: Coding Lab icon
   f_great: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM7.5 13.5h9a4.5 4.5 0 0 1-9 0zM9 9h.01M15 9h.01',
   f_good: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8 14s1.5 2 4 2 4-2 4-2M9 9.5h.01M15 9.5h.01',
   f_okay: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8.5 15h7M9 9.5h.01M15 9.5h.01',
@@ -80,6 +82,7 @@ const FEATURES = [
   { id: 'streak', title: 'Daily Streak', icon: 'flame', desc: 'Check in, earn XP', c: '#fb923c', isNew: true },
   { id: 'card', title: 'Daily Card', icon: 'cardI', desc: 'New card every day', c: '#8c82f2', isNew: true },
   { id: 'habits', title: 'Habit Tracker', icon: 'checkc', desc: 'Build streaks', c: '#4ade80', isNew: true },
+  { id: 'coding', title: 'Coding Lab', icon: 'code', desc: 'HTML, CSS & JS editor', c: '#22d3ee', isNew: true }, // NEW
   { id: 'love', title: 'Love Mode', icon: 'heart', desc: 'Virtual companion', c: '#ff4d85' },
   { id: 'alterego', title: 'Alter Ego', icon: 'users', desc: 'Switch personality', c: '#8c82f2' },
   { id: 'mirror', title: 'Digital Mirror', icon: 'mirror', desc: 'Personality scan', c: '#00e5ff' },
@@ -719,7 +722,10 @@ export default function Features() {
         </div>
       </main>
 
-      {f && (
+      {/* NEW: Coding Lab full-screen editor (apna header + Back button, Back = close) */}
+      {f && f.id === 'coding' && <CodingLab theme={theme} onTheme={flip} onBack={close} />}
+
+      {f && f.id !== 'coding' && (
         <section className={styles.screen} style={{ '--c': f.c }}>
           <header className={styles.sHead}>
             <button className={styles.back} onClick={close} aria-label="Back"><Ico n="back" s={20} /></button>
